@@ -1,0 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  html,
+  body,
+  #app {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-ink-50 text-ink-900 antialiased dark:bg-ink-950 dark:text-ink-100;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-ink-200 bg-white shadow-sm dark:border-ink-800 dark:bg-ink-900;
+  }
+
+  .card-pad {
+    @apply p-5;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm
+           font-semibold transition focus:outline-none focus-visible:ring-2
+           focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50
+           dark:focus-visible:ring-offset-ink-900;
+  }
+
+  .btn-primary {
+    @apply btn bg-ink-900 text-white hover:bg-ink-800 focus-visible:ring-ink-700
+           dark:bg-ink-100 dark:text-ink-900 dark:hover:bg-white;
+  }
+
+  .btn-danger {
+    @apply btn bg-alert-600 text-white hover:bg-alert-700 focus-visible:ring-alert-500;
+  }
+
+  .btn-ghost {
+    @apply btn border border-ink-200 bg-white text-ink-700 hover:bg-ink-50
+           focus-visible:ring-ink-400 dark:border-ink-700 dark:bg-ink-900
+           dark:text-ink-200 dark:hover:bg-ink-800;
+  }
+
+  .field {
+    @apply w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm text-ink-900
+           placeholder:text-ink-400 focus:border-ink-500 focus:outline-none focus:ring-1
+           focus:ring-ink-500 dark:border-ink-700 dark:bg-ink-950 dark:text-ink-100;
+  }
+
+  .label {
+    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-ink-400;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+
+  .table-head {
+    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-ink-400;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 text-sm text-ink-800 dark:text-ink-200;
+  }
+}

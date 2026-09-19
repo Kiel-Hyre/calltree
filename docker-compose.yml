@@ -1,0 +1,76 @@
+# Local stack: Postgres + the API/SPA container + the background workers.
+#
+#   cp .env.example .env
+#   docker compose up --build
+#   open http://localhost:8000
+#
+# The worker and poller share the web image and differ only by entrypoint
+# role, which mirrors how they are deployed on Cloud Run.
+
+name: calltree
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file: [.env]
+  environment:
+    DATABASE_URL: postgres://${POSTGRES_USER:-calltree}:${POSTGRES_PASSWORD:-calltree-local-dev}@db:5432/${POSTGRES_DB:-calltree}
+    DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1],web}
+    PORT: "8080"
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-calltree}
+      POSTGRES_USER: ${POSTGRES_USER:-calltree}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-calltree-local-dev}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-calltree} -d ${POSTGRES_DB:-calltree}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    <<: *app
+    command: ["web"]
+    ports:
+      - "${WEB_PORT:-8000}:8080"
+
+  worker:
+    <<: *app
+    command: ["worker"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-calltree}:${POSTGRES_PASSWORD:-calltree-local-dev}@db:5432/${POSTGRES_DB:-calltree}
+      # Migrations are the web container's job; the worker must not race it.
+      RUN_MIGRATIONS_ON_START: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+  # USGS ingestion. Opt in with:  docker compose --profile poller up
+  poller:
+    <<: *app
+    command: ["poller"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-calltree}:${POSTGRES_PASSWORD:-calltree-local-dev}@db:5432/${POSTGRES_DB:-calltree}
+      RUN_MIGRATIONS_ON_START: "false"
+    profiles: ["poller"]
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+volumes:
+  pgdata:

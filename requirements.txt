@@ -1,0 +1,18 @@
+# Core framework
+Django>=5.1,<5.3
+gunicorn>=23.0,<24
+djangorestframework>=3.15,<4
+whitenoise>=6.8,<7
+
+# Configuration / database
+python-dotenv>=1.0,<2
+dj-database-url>=2.3,<3
+psycopg[binary]>=3.2,<4
+
+# External integrations
+requests>=2.32,<3
+
+# Google Cloud Platform (Firestore + Pub/Sub). Optional at runtime:
+# set FIRESTORE_ENABLED / PUBSUB_ENABLED to false for local development.
+google-cloud-firestore>=2.19,<3
+google-cloud-pubsub>=2.27,<3

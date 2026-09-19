@@ -1,0 +1,33 @@
+# Lint configuration. Run: ruff check . / ruff format .
+
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv", "frontend", "core/migrations", "staticfiles"]
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "DJ", "RUF"]
+ignore = [
+    # Django and DRF idiom: Meta, fields lists and inline tuples are class
+    # attributes by design, and RUF012 flags every one of them.
+    "RUF012",
+    # The dissemination and mirror layers catch broadly on purpose: one
+    # unreachable recipient must never abort a broadcast. Each site logs.
+    "BLE001",
+    # Long strings in help text and alert templates read better unwrapped.
+    "E501",
+]
+
+[lint.per-file-ignores]
+# Tests name fixtures they only need for their side effects.
+"tests/*" = ["ARG001", "RUF059"]
+
+[lint.isort]
+known-first-party = [
+    "accountability",
+    "api",
+    "calltree",
+    "core",
+    "dissemination",
+    "engine",
+    "ingestion",
+]

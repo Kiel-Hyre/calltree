@@ -1,0 +1,35 @@
+# Normalise to LF in the repository. Without this, a Windows checkout can
+# commit CRLF into entrypoint.sh, and the Linux container then fails to start
+# with an unhelpful "no such file or directory" on the shebang.
+* text=auto eol=lf
+
+*.sh      text eol=lf
+Dockerfile text eol=lf
+*.py      text eol=lf
+*.js      text eol=lf
+*.vue     text eol=lf
+*.css     text eol=lf
+*.html    text eol=lf
+*.json    text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.toml    text eol=lf
+*.md      text eol=lf
+*.ini     text eol=lf
+.env*     text eol=lf
+
+# Windows-only helpers keep CRLF.
+*.bat     text eol=crlf
+*.ps1     text eol=crlf
+
+# Binary: never touch, never diff.
+*.pdf     binary
+*.png     binary
+*.jpg     binary
+*.ico     binary
+*.woff    binary
+*.woff2   binary
+
+# Generated; collapse in review.
+frontend/package-lock.json linguist-generated=true -diff
+core/migrations/*.py       linguist-generated=true
