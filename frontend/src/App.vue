@@ -20,6 +20,18 @@ const links = [
   { to: '/health', label: 'System health', icon: 'M20 12a8 8 0 11-16 0 8 8 0 0116 0zM12 8v4l3 2' },
 ]
 
+// Vue Router's `active-class` matches on route *records*, not path prefixes.
+// `/drills` and `/drills/:id` are separate flat records, so the built-in
+// matching leaves the sidebar unhighlighted on a drill detail page. Compare
+// paths ourselves instead.
+function isActive(link) {
+  if (link.to === '/') return route.path === '/'
+  return route.path === link.to || route.path.startsWith(`${link.to}/`)
+}
+
+const ACTIVE_CLASS =
+  'bg-ink-900 text-white hover:bg-ink-900 dark:bg-ink-100 dark:text-ink-900 dark:hover:bg-ink-100'
+
 async function signOut() {
   await session.logout()
   router.push({ name: 'login' })
@@ -67,7 +79,8 @@ async function signOut() {
           :to="link.to"
           class="mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium
                  text-ink-600 transition hover:bg-ink-100 dark:text-ink-300 dark:hover:bg-ink-800"
-          active-class="bg-ink-900 text-white hover:bg-ink-900 dark:bg-ink-100 dark:text-ink-900 dark:hover:bg-ink-100"
+          :class="isActive(link) ? ACTIVE_CLASS : ''"
+          :aria-current="isActive(link) ? 'page' : undefined"
           @click="menuOpen = false"
         >
           <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

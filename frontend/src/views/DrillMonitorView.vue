@@ -3,8 +3,10 @@
  * Interactive Dashboard Monitoring: the live status table the Safety Officer
  * watches while responses stream in.
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { api } from '@/api/client'
+import { computed, ref } from 'vue'
+import { RouterLink } from 'vue-router'
+import { api, isAborted } from '@/api/client'
+import { usePolling } from '@/composables/usePolling'
 import { formatDateTime, formatSeconds, formatTime } from '@/utils/format'
 import PageHeader from '@/components/PageHeader.vue'
 import StatTile from '@/components/StatTile.vue'
@@ -18,7 +20,6 @@ const error = ref('')
 const notice = ref('')
 const filter = ref('all')
 const busy = ref(false)
-let timer = null
 
 const drill = computed(() => monitor.value?.drill)
 const stats = computed(() => monitor.value?.statistics)
@@ -40,14 +41,21 @@ const FILTERS = [
   { key: 'non_compliant', label: 'Non-compliant' },
 ]
 
-async function load() {
+async function load(signal) {
   try {
-    monitor.value = await api.get(`/api/drills/${props.id}/monitor/`)
+    monitor.value = await api.get(`/api/drills/${props.id}/monitor/`, null, signal)
     error.value = ''
+    // A finished drill cannot change again; stop polling rather than
+    // refreshing a static page every five seconds forever.
+    if (monitor.value.drill.status !== 'active') stop()
   } catch (err) {
+    if (isAborted(err)) return
     error.value = err.message
+    throw err
   }
 }
+
+const { pending, refresh, start, stop } = usePolling(load, { interval: 5000 })
 
 async function act(path, confirmText) {
   if (confirmText && !window.confirm(confirmText)) return
@@ -62,7 +70,8 @@ async function act(path, confirmText) {
     } else {
       notice.value = 'Drill updated.'
     }
-    await load()
+    // Activating restarts a poll that stop() may have ended.
+    start()
   } catch (err) {
     error.value = err.message
   } finally {
@@ -76,27 +85,30 @@ async function override(participant, status) {
       status,
       note: 'Set manually by the Safety Officer',
     })
-    await load()
+    await refresh()
   } catch (err) {
-    error.value = err.message
+    if (!isAborted(err)) error.value = err.message
   }
 }
 
 function exportCsv() {
   window.location.href = `/api/drills/${props.id}/report.csv/`
 }
-
-onMounted(() => {
-  load()
-  // 5s polling: fast enough to feel live on the dashboard, cheap enough to
-  // run for the whole response window without straining Cloud Run.
-  timer = setInterval(load, 5000)
-})
-onUnmounted(() => clearInterval(timer))
 </script>
 
 <template>
   <div>
+    <RouterLink
+      to="/drills"
+      class="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-ink-500
+             transition hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100"
+    >
+      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      All drills
+    </RouterLink>
+
     <template v-if="drill">
       <PageHeader :title="drill.name" :subtitle="drill.location_names.join(', ')">
         <template #actions>
@@ -208,9 +220,17 @@ onUnmounted(() => clearInterval(timer))
         </table>
       </div>
 
-      <p class="mt-3 text-xs text-ink-500">
-        Auto-refreshing every 5 seconds · server time
-        {{ formatDateTime(monitor.server_time) }}
+      <p class="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-500">
+        <span v-if="drill.status === 'active'">
+          Auto-refreshing every 5 seconds{{ pending ? ' · updating…' : '' }}
+        </span>
+        <span v-else>
+          Drill closed — live updates stopped.
+          <button class="underline hover:text-ink-900 dark:hover:text-ink-100" @click="refresh">
+            Refresh now
+          </button>
+        </span>
+        <span>· server time {{ formatDateTime(monitor.server_time) }}</span>
       </p>
     </template>
 

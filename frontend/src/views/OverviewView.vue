@@ -1,7 +1,8 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { api } from '@/api/client'
+import { api, isAborted } from '@/api/client'
+import { usePolling } from '@/composables/usePolling'
 import { formatDateTime } from '@/utils/format'
 import PageHeader from '@/components/PageHeader.vue'
 import StatTile from '@/components/StatTile.vue'
@@ -9,24 +10,21 @@ import AlertBanner from '@/components/AlertBanner.vue'
 
 const data = ref(null)
 const error = ref('')
-let timer = null
 
-async function load() {
+async function load(signal) {
   try {
-    data.value = await api.get('/api/overview/')
+    data.value = await api.get('/api/overview/', null, signal)
     error.value = ''
   } catch (err) {
+    if (isAborted(err)) return
     error.value = err.message
+    throw err
   }
 }
 
-onMounted(() => {
-  load()
-  // An active drill changes second by second; 10s keeps the landing page
-  // current without the cost of the full monitor poll.
-  timer = setInterval(load, 10000)
-})
-onUnmounted(() => clearInterval(timer))
+// An active drill changes second by second; 10s keeps the landing page
+// current without the cost of the full monitor poll.
+usePolling(load, { interval: 10000 })
 </script>
 
 <template>

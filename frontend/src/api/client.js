@@ -29,7 +29,7 @@ function readCookie(name) {
   return match ? decodeURIComponent(match[2]) : null
 }
 
-async function request(path, { method = 'GET', body, params, raw = false } = {}) {
+async function request(path, { method = 'GET', body, params, raw = false, signal } = {}) {
   const url = new URL(path, window.location.origin)
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
@@ -52,9 +52,17 @@ async function request(path, { method = 'GET', body, params, raw = false } = {})
       method,
       headers,
       credentials: 'same-origin',
+      signal,
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch (cause) {
+    // A cancelled request is not a failure: the caller navigated away or a
+    // newer poll superseded this one. Flag it so callers can stay quiet.
+    if (cause?.name === 'AbortError') {
+      const aborted = new ApiError('Request cancelled', { status: 0 })
+      aborted.aborted = true
+      throw aborted
+    }
     throw new ApiError('Cannot reach the server. Check your connection.', { status: 0 })
   }
 
@@ -87,13 +95,16 @@ async function request(path, { method = 'GET', body, params, raw = false } = {})
 }
 
 export const api = {
-  get: (path, params) => request(path, { params }),
-  post: (path, body) => request(path, { method: 'POST', body }),
-  put: (path, body) => request(path, { method: 'PUT', body }),
-  patch: (path, body) => request(path, { method: 'PATCH', body }),
-  delete: (path) => request(path, { method: 'DELETE' }),
-  raw: (path, params) => request(path, { params, raw: true }),
+  get: (path, params, signal) => request(path, { params, signal }),
+  post: (path, body, signal) => request(path, { method: 'POST', body, signal }),
+  put: (path, body, signal) => request(path, { method: 'PUT', body, signal }),
+  patch: (path, body, signal) => request(path, { method: 'PATCH', body, signal }),
+  delete: (path, signal) => request(path, { method: 'DELETE', signal }),
+  raw: (path, params, signal) => request(path, { params, raw: true, signal }),
 }
+
+/** True when an error is a cancellation rather than a real failure. */
+export const isAborted = (err) => err?.aborted === true || err?.name === 'AbortError'
 
 /** DRF pagination returns {results: []}; plain lists come back bare. */
 export const listOf = (payload) =>

@@ -12,6 +12,33 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ## [Unreleased]
 
+### Fixed
+
+- The sidebar did not highlight **Drills** on a drill detail page, and the
+  page had no way back to the list. Vue Router's `active-class` matches on
+  route *records*, not path prefixes, and `/drills` and `/drills/:id` are
+  separate flat records — so the built-in matching never fired.
+  `App.vue` now compares paths itself and sets `aria-current`, and
+  `DrillMonitorView` has an "All drills" back link.
+
+### Changed
+
+- Replaced the bare `setInterval` polling in `DrillMonitorView` and
+  `OverviewView` with a `usePolling` composable. The old version fired on a
+  fixed interval whether or not the previous request had returned: measured
+  against a server taking 8s per poll, it opened 6 requests with 3 in flight
+  at once, and concurrency grows without bound the slower the server gets.
+  Browsers allow roughly six connections per host, so a loaded server could
+  starve the requests a click depends on — the page still renders, but
+  nothing responds until a reload. The composable holds it to one request at
+  a time (same measurement: 2 polls, 1 concurrent), aborts in flight on
+  unmount, pauses in a hidden tab, backs off after failures, and stops once a
+  drill is no longer active.
+
+  Note: the pile-up is reproducible, but the click failure it can cause was
+  not reproduced directly — at 3 concurrent requests clicks still worked.
+  This removes the mechanism rather than a confirmed instance of it.
+
 ### Added
 
 - `.gitattributes` normalising the repository to LF. Without it a Windows
