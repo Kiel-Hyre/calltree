@@ -117,10 +117,18 @@ ASGI_APPLICATION = "calltree.asgi.application"
 # the immutable drill audit trail. Live safety status is additionally mirrored
 # into Cloud Firestore (see FIRESTORE_ENABLED) for real-time dashboard sync.
 # --------------------------------------------------------------------------
-_default_sqlite = "sqlite:///" + str(BASE_DIR / "data" / "calltree.sqlite3")
+_DATABASE_URL = os.getenv("DATABASE_URL") or ""
+if not _DATABASE_URL:
+    # Development fallback. data/ is gitignored, so create it here rather
+    # than making a fresh clone fail on `migrate` with "unable to open
+    # database file".
+    _sqlite_dir = BASE_DIR / "data"
+    _sqlite_dir.mkdir(parents=True, exist_ok=True)
+    _DATABASE_URL = "sqlite:///" + str(_sqlite_dir / "calltree.sqlite3")
+
 DATABASES = {
     "default": dj_database_url.parse(
-        os.getenv("DATABASE_URL") or _default_sqlite,
+        _DATABASE_URL,
         conn_max_age=env_int("DB_CONN_MAX_AGE", 600),
         conn_health_checks=True,
     )

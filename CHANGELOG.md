@@ -12,7 +12,26 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- `.gitattributes` normalising the repository to LF. Without it a Windows
+  checkout can commit CRLF into `entrypoint.sh`, and the Linux container then
+  fails to start with an unhelpful "no such file or directory" on the shebang.
+- `ruff.toml` pinning the lint rules, with Django and DRF idioms exempted
+  (`RUF012`) and the deliberate broad excepts in the dissemination and mirror
+  layers exempted (`BLE001`).
+- `DJANGO_SSL_REDIRECT` (default on in production) so `check --deploy` passes
+  with no outstanding transport warnings. Safe behind Cloud Run because
+  `SECURE_PROXY_SSL_HEADER` is already set.
+
+### Fixed
+
+- A fresh clone failed on `manage.py migrate` with "unable to open database
+  file": the default SQLite path lives in `data/`, which is gitignored and so
+  never exists on checkout. Settings now create the directory on demand.
+- The test suite inherited webhook secrets from the developer's local `.env`,
+  so the webhook tests failed on any machine that had one. `tests/conftest.py`
+  now pins those settings; the tests that assert enforcement set their own.
 
 ---
 
