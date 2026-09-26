@@ -17,7 +17,9 @@ from core.models import Drill, Employee, Location, SeismicEvent
 @pytest.fixture(autouse=True)
 def offline_gateways(settings):
     """Keep every test off the network and out of GCP."""
+    settings.SMS_PROVIDER = "m360"
     settings.M360_ENABLED = False
+    settings.TEXTBEE_ENABLED = False
     settings.EMAIL_ENABLED = False
     settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
     settings.PUBSUB_ENABLED = False
@@ -32,6 +34,7 @@ def offline_gateways(settings):
     # happens to have in .env. Tests that assert enforcement set their own.
     settings.USGS_WEBHOOK_TOKEN = ""
     settings.M360_WEBHOOK_TOKEN = ""
+    settings.TEXTBEE_WEBHOOK_TOKEN = ""
     settings.PUBSUB_PUSH_TOKEN = ""
     return settings
 

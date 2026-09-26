@@ -10,7 +10,7 @@ reply on a live dashboard — replacing the manual phone tree that breaks down
 under stress.
 
 Django 5 + Django REST Framework · Vue 3 + Vite + Tailwind · Google Cloud
-Platform (Cloud Run, Firestore, Pub/Sub) · M360 SMS gateway.
+Platform (Cloud Run, Firestore, Pub/Sub) · M360 or TextBee SMS gateway.
 
 ---
 
@@ -47,8 +47,8 @@ Four modules, matching the system architecture:
                                            ▼
                               ┌──────────────────────────┐
                               │ 3. Cloud Dissemination   │  Pub/Sub fan-out ▶
-   M360 SMS  ◀────────────────│    dissemination/        │  M360 SMS + SMTP
-   SMTP mail ◀────────────────│                          │
+   SMS (M360 or TextBee) ◀────│    dissemination/        │  one active SMS
+   SMTP mail ◀────────────────│                          │  provider + SMTP
                               └────────────┬─────────────┘
                                            ▼
   employee replies            ┌──────────────────────────┐
@@ -84,8 +84,18 @@ without it:
 |---|---|---|
 | Cloud Pub/Sub | Fan-out via a push subscription | Local thread-pool dispatcher |
 | Cloud Firestore | Live status mirrored for real-time clients | Relational storage only |
-| M360 gateway | Real SMS, real credits | Delivery simulated and logged |
+| M360 / TextBee gateway | Real SMS, real cost | Delivery simulated and logged |
 | SMTP | Real email | Console backend |
+
+### Two SMS providers
+
+`SMS_PROVIDER` picks which gateway actually sends: `m360` (a Philippines SMS
+API) or `textbee` (a self-hosted-friendly gateway that sends through a
+paired Android phone's own SIM, via [textbee.dev](https://textbee.dev)). Both
+adapters live in [`dissemination/gateways.py`](dissemination/gateways.py) and
+share the same `DeliveryResult` contract, so the rest of the system does not
+know or care which one is active. Each still simulates delivery when its own
+`*_ENABLED` flag is off, independent of which one `SMS_PROVIDER` names.
 
 This is deliberate: the whole application runs on a laptop with no GCP project
 and no SMS credits, and a mirror outage can never stop an alert going out.
@@ -181,7 +191,8 @@ The ones that matter most:
 | `DJANGO_SECRET_KEY` | Generate a fresh one per environment. |
 | `DJANGO_ALLOWED_HOSTS` / `DJANGO_CSRF_TRUSTED_ORIGINS` | Required once you are behind a real hostname. |
 | `PUBLIC_BASE_URL` | Builds each employee's status link. **Must be reachable from a phone on mobile data** — `localhost` will not work in a real drill. |
-| `M360_ENABLED` | `true` sends real SMS and spends real credits. |
+| `SMS_PROVIDER` | `m360` or `textbee` — which gateway actually sends. |
+| `M360_ENABLED` / `TEXTBEE_ENABLED` | `true` sends real SMS and spends real money. Only the one named by `SMS_PROVIDER` is actually used to send. |
 | `AUTO_TRIGGER_ENABLED` | `true` lets a USGS event broadcast with no human in the loop. Keep it `false` until the geofences are tuned. |
 | `*_WEBHOOK_TOKEN`, `PUBSUB_PUSH_TOKEN` | Shared secrets for the machine-to-machine endpoints. **Unset means that endpoint is open** — the app logs a warning, but set them before deploying. |
 
@@ -192,6 +203,24 @@ revised its API across versions. If your account documents different paths or
 field names, change them in `.env` rather than in code, and check the request
 shape in [`dissemination/gateways.py`](dissemination/gateways.py) against your
 account's documentation before the first live drill.
+
+### About the TextBee endpoint
+
+TextBee turns a paired Android phone into the gateway, so `TEXTBEE_DEVICE_ID`
+(shown in the TextBee dashboard) has to be set before `TEXTBEE_ENABLED=true`
+will actually send anything — with it blank, sending simulates instead of
+failing. TextBee's own webhook configuration has **no way to set a custom
+header**, so `TEXTBEE_WEBHOOK_TOKEN`, if you set one, has to travel in the
+callback URL instead:
+
+```
+https://your-host/api/webhooks/textbee/?token=<TEXTBEE_WEBHOOK_TOKEN>
+```
+
+Paste that whole URL into TextBee's webhook field and no header is ever
+needed. Leaving `TEXTBEE_WEBHOOK_TOKEN` blank accepts the callback with no
+credential at all — the app logs a warning when it does, and this is only
+appropriate while you are still wiring the integration up.
 
 ---
 
@@ -273,9 +302,12 @@ authentication, so there is no token to manage.
 | `GET` `POST` | `/api/status/{token}/` | The token in the URL |
 | `POST` | `/api/webhooks/usgs/` | `USGS_WEBHOOK_TOKEN` |
 | `POST` | `/api/webhooks/m360/` | `M360_WEBHOOK_TOKEN` |
+| `POST` | `/api/webhooks/textbee/` | `TEXTBEE_WEBHOOK_TOKEN` |
 | `POST` | `/api/webhooks/pubsub/` | `PUBSUB_PUSH_TOKEN` |
 
-Webhook tokens travel as `?token=…` or an `X-Webhook-Token` header.
+Webhook tokens travel as `?token=…` or an `X-Webhook-Token` header — except
+TextBee's, which only ever arrives as `?token=…`, since TextBee's own
+webhook configuration cannot send a custom header.
 
 ```bash
 # Ingest a simulated USGS event
@@ -285,10 +317,15 @@ curl -X POST "http://localhost:8000/api/webhooks/usgs/?token=$USGS_WEBHOOK_TOKEN
        "properties":{"mag":6.4,"place":"Luzon","time":1758290000000},
        "geometry":{"type":"Point","coordinates":[121.05,14.60,30.0]}}'
 
-# Simulate an employee replying SAFE by SMS
+# Simulate an employee replying SAFE by SMS (M360)
 curl -X POST "http://localhost:8000/api/webhooks/m360/?token=$M360_WEBHOOK_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"msisdn":"639171000100","message":"SAFE"}'
+
+# Simulate an employee replying SAFE by SMS (TextBee) - no header, token in the URL
+curl -X POST "http://localhost:8000/api/webhooks/textbee/?token=$TEXTBEE_WEBHOOK_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"sender":"639171000100","message":"SAFE"}'
 ```
 
 ---
@@ -310,7 +347,7 @@ integration coverage of the API and webhooks.
 | `tests/test_core_services.py` | Phone normalisation, message templating, audit |
 | `tests/test_proximity.py` | Haversine distance and the Trigger Filter |
 | `tests/test_engine_services.py` | Roster, activation, responses, escalation, statistics |
-| `tests/test_dissemination_services.py` | M360 client, email, dispatch, idempotency, health |
+| `tests/test_dissemination_services.py` | M360 & TextBee clients, provider selection, email, dispatch, idempotency, health |
 | `tests/test_accountability_services.py` | Inbound SMS matching, status links |
 | `tests/test_ingestion_usgs.py` | GeoJSON, ENS email parsing, de-duplication |
 | `tests/test_api.py` | REST endpoints, auth, webhooks, CSV export |
@@ -337,7 +374,7 @@ calltree/          Django project: settings, URLs, SPA shell view
 core/              Models, Firestore mirror, shared services, admin
 ingestion/         Module 1 - USGS feed, webhook and ENS email parsing
 engine/            Module 2 - proximity, Trigger Filter, call tree orchestration
-dissemination/     Module 3 - Pub/Sub, M360 SMS, SMTP
+dissemination/     Module 3 - Pub/Sub, SMS (M360 or TextBee), SMTP
 accountability/    Module 4 - inbound replies, status links
 api/               DRF serializers, viewsets, webhooks
 frontend/          Vue 3 SPA (Vite + Tailwind), builds to frontend/dist

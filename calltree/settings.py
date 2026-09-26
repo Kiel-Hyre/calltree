@@ -240,6 +240,16 @@ PUBSUB_PUSH_TOKEN = os.getenv("PUBSUB_PUSH_TOKEN", "")
 DISPATCH_FALLBACK_THREADS = env_int("DISPATCH_FALLBACK_THREADS", 4)
 
 # --------------------------------------------------------------------------
+# SMS gateway selection
+#
+# One outbound SMS provider is active at a time, chosen here. Each provider
+# still has its own *_ENABLED flag below and simulates delivery when off, so
+# switching providers or running with neither configured both work.
+# --------------------------------------------------------------------------
+SMS_PROVIDER = os.getenv("SMS_PROVIDER", "m360").strip().lower()
+SMS_MAX_LENGTH = env_int("SMS_MAX_LENGTH", 320)
+
+# --------------------------------------------------------------------------
 # M360 SMS Gateway
 #
 # Endpoint and payload field names are configurable: M360 has revised its
@@ -253,7 +263,24 @@ M360_APP_SECRET = os.getenv("M360_APP_SECRET", "")
 M360_SHORTCODE_MASK = os.getenv("M360_SHORTCODE_MASK", "")
 M360_TIMEOUT = env_int("M360_TIMEOUT", 15)
 M360_WEBHOOK_TOKEN = os.getenv("M360_WEBHOOK_TOKEN", "")
-SMS_MAX_LENGTH = env_int("SMS_MAX_LENGTH", 320)
+
+# --------------------------------------------------------------------------
+# TextBee SMS Gateway (textbee.dev)
+#
+# TextBee turns an Android phone into an SMS gateway: the app polls or
+# receives push jobs from the TextBee API and sends through the phone's own
+# SIM. TEXTBEE_DEVICE_ID is that phone's device id, shown in the TextBee
+# dashboard. The inbound webhook is unauthenticated by default because
+# TextBee's own webhook configuration has no way to set a custom header;
+# TEXTBEE_WEBHOOK_TOKEN, if set, is instead appended to the callback URL as
+# `?token=...`, which needs no header at all.
+# --------------------------------------------------------------------------
+TEXTBEE_ENABLED = env_bool("TEXTBEE_ENABLED", False)
+TEXTBEE_BASE_URL = os.getenv("TEXTBEE_BASE_URL", "https://api.textbee.dev/api/v1")
+TEXTBEE_API_KEY = os.getenv("TEXTBEE_API_KEY", "")
+TEXTBEE_DEVICE_ID = os.getenv("TEXTBEE_DEVICE_ID", "")
+TEXTBEE_TIMEOUT = env_int("TEXTBEE_TIMEOUT", 15)
+TEXTBEE_WEBHOOK_TOKEN = os.getenv("TEXTBEE_WEBHOOK_TOKEN", "")
 
 # --------------------------------------------------------------------------
 # USGS Earthquake Notification Service ingestion

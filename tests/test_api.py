@@ -305,6 +305,100 @@ class TestM360InboundWebhook:
         assert InboundMessage.objects.count() == 1
 
 
+class TestTextBeeInboundWebhook:
+    def test_a_safe_reply_updates_the_dashboard(self, client, active, staff):
+        response = client.post(
+            "/api/webhooks/textbee/",
+            data=json.dumps({"sender": "639171000100", "message": "SAFE"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        assert response.json()["processed"] is True
+        assert active.participants.get(employee=staff).status == DrillParticipant.Status.SAFE
+
+    @pytest.mark.parametrize(
+        "sender_key", ["sender", "from", "phoneNumber", "phone", "receivedFrom", "number"]
+    )
+    def test_accepts_the_field_names_textbee_might_use(self, client, active, sender_key):
+        response = client.post(
+            "/api/webhooks/textbee/",
+            data=json.dumps({sender_key: "639171000100", "message": "SAFE"}),
+            content_type="application/json",
+        )
+
+        assert response.json()["processed"] is True
+
+    @pytest.mark.parametrize("text_key", ["message", "text", "body", "content", "sms"])
+    def test_accepts_the_body_field_names_textbee_might_use(self, client, active, text_key):
+        response = client.post(
+            "/api/webhooks/textbee/",
+            data=json.dumps({"sender": "639171000100", text_key: "SAFE"}),
+            content_type="application/json",
+        )
+
+        assert response.json()["processed"] is True
+
+    def test_a_payload_with_no_sender_is_a_400(self, client, active):
+        response = client.post(
+            "/api/webhooks/textbee/",
+            data=json.dumps({"message": "SAFE"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+
+    def test_an_unmatched_reply_is_accepted_and_kept(self, client, active):
+        response = client.post(
+            "/api/webhooks/textbee/",
+            data=json.dumps({"sender": "639990000000", "message": "SAFE"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        assert response.json()["processed"] is False
+        assert InboundMessage.objects.count() == 1
+
+    def test_with_no_token_configured_the_callback_needs_no_credential(self, client, active, staff, settings):
+        """TextBee's own webhook config cannot send a header or a token, so
+        the default (blank secret) has to work with nothing supplied at all."""
+        settings.TEXTBEE_WEBHOOK_TOKEN = ""
+
+        response = client.post(
+            "/api/webhooks/textbee/",
+            data=json.dumps({"sender": "639171000100", "message": "SAFE"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        assert active.participants.get(employee=staff).status == DrillParticipant.Status.SAFE
+
+    def test_a_configured_token_is_enforced(self, client, active, settings):
+        settings.TEXTBEE_WEBHOOK_TOKEN = "s3cret"
+
+        response = client.post(
+            "/api/webhooks/textbee/",
+            data=json.dumps({"sender": "639171000100", "message": "SAFE"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 403
+
+    def test_the_token_travels_in_the_url_with_no_header_needed(self, client, active, staff, settings):
+        """This is the whole point of the design: TextBee cannot set a
+        custom header, so the secret has to work from the query string alone."""
+        settings.TEXTBEE_WEBHOOK_TOKEN = "s3cret"
+
+        response = client.post(
+            "/api/webhooks/textbee/?token=s3cret",
+            data=json.dumps({"sender": "639171000100", "message": "SAFE"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        assert active.participants.get(employee=staff).status == DrillParticipant.Status.SAFE
+
+
 class TestPubSubPushWebhook:
     def _envelope(self, notification_id):
         data = base64.b64encode(

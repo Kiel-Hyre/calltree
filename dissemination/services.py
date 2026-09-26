@@ -23,7 +23,7 @@ from django.utils import timezone
 from core import datastore
 from core.models import DrillParticipant, Notification
 from dissemination import pubsub
-from dissemination.gateways import EmailChannel, M360Client
+from dissemination.gateways import EmailChannel, get_sms_client
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ def deliver_notification(notification_id: int) -> str:
     notification.attempts += 1
 
     if notification.channel == Notification.Channel.SMS:
-        result = M360Client().send(notification.recipient, notification.body)
+        result = get_sms_client().send(notification.recipient, notification.body)
     else:
         subject = _subject_for(notification)
         with EmailChannel(subject=subject) as channel:
@@ -178,7 +178,11 @@ def health_check() -> dict:
     except Exception as exc:
         checks["database"] = {"ok": False, "error": str(exc)[:200]}
 
-    checks["sms_gateway"] = M360Client().balance()
+    client = get_sms_client()
+    checks["sms_gateway"] = (
+        client.device_status() if hasattr(client, "device_status") else client.balance()
+    )
+    checks["sms_gateway"]["provider"] = settings.SMS_PROVIDER
     checks["sms_gateway"]["ok"] = "error" not in checks["sms_gateway"]
 
     checks["email"] = {

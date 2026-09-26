@@ -12,6 +12,41 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ## [Unreleased]
 
+### Added
+
+- **TextBee.dev as a second SMS provider** (`dissemination/gateways.py`).
+  `TextBeeClient` sends through a paired Android phone's own SIM via the
+  TextBee API, matching `M360Client`'s `DeliveryResult` contract so the
+  dispatcher and health check do not need to know which gateway is active.
+  A new `SMS_PROVIDER` setting (`m360` | `textbee`) selects it; `get_sms_client()`
+  centralises the choice so a third gateway later is a new client class plus
+  one branch, not a search-and-replace. `TextBeeClient.device_status()`
+  reports the paired device's reachability for the System Health Check,
+  since TextBee has no prepaid credit balance the way M360 does.
+- **`/api/webhooks/textbee/`** (`api/webhooks.py`) for inbound SAFE/HELP
+  replies via TextBee, reusing `accountability.services.handle_inbound_sms`.
+  Field names are read tolerantly (several possible spellings for the sender
+  and the message body), the same pattern as the M360 inbound view, since
+  TextBee's exact payload shape has not been pinned against a live account.
+- **Header-free webhook authentication for TextBee.** TextBee's own webhook
+  configuration has no way to set a custom header, so `TEXTBEE_WEBHOOK_TOKEN`
+  is designed to travel as `?token=...` in the callback URL - the existing
+  `_token_ok` helper already supported a query-string token as an
+  alternative to the `X-Webhook-Token` header, so this needed no change to
+  that helper, only a new view that uses it. Leaving the token unset accepts
+  the callback with no credential at all (the existing degrade-with-a-warning
+  behaviour every webhook already has), for wiring the integration up before
+  a token is chosen.
+- `.env.example` / `.env`: `SMS_PROVIDER`, and a `TEXTBEE_*` block
+  (`TEXTBEE_ENABLED`, `TEXTBEE_API_KEY`, `TEXTBEE_DEVICE_ID`,
+  `TEXTBEE_BASE_URL`, `TEXTBEE_TIMEOUT`, `TEXTBEE_WEBHOOK_TOKEN`) alongside
+  the existing M360 block.
+- Tests: `TestTextBeeClient`, `TestGetSmsClient` and a provider-switch case in
+  `TestDeliverNotification`/`TestHealthCheck` in `tests/test_dissemination_services.py`;
+  `TestTextBeeInboundWebhook` in `tests/test_api.py`, including a test that
+  the query-string token works with no header at all, and a test that a
+  configured token is still enforced.
+
 ### Fixed
 
 - The sidebar did not highlight **Drills** on a drill detail page, and the

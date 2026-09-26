@@ -35,6 +35,7 @@ urlpatterns = [
     # Machine-to-machine
     path("webhooks/usgs/", webhooks.UsgsWebhookView.as_view(), name="webhook-usgs"),
     path("webhooks/m360/", webhooks.M360InboundView.as_view(), name="webhook-m360"),
+    path("webhooks/textbee/", webhooks.TextBeeInboundView.as_view(), name="webhook-textbee"),
     path("webhooks/pubsub/", webhooks.PubSubPushView.as_view(), name="webhook-pubsub"),
     path("", include(router.urls)),
 ]

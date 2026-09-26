@@ -53,6 +53,20 @@ def secrets_equal(a: str, b: str) -> bool:
     return compare_digest(str(a), str(b))
 
 
+def _first(payload: dict, keys) -> str:
+    """Return the first non-empty value found under any of ``keys``.
+
+    Shared by the inbound SMS webhooks: different gateways, and different
+    versions of the same gateway, have used different field names for the
+    same thing.
+    """
+    for key in keys:
+        value = payload.get(key)
+        if value:
+            return str(value)
+    return ""
+
+
 class UsgsWebhookView(APIView):
     """USGS Data Ingestion Module - webhook entry point.
 
@@ -117,8 +131,8 @@ class M360InboundView(APIView):
             return Response({"detail": "Invalid token."}, status=status.HTTP_403_FORBIDDEN)
 
         payload = request.data if isinstance(request.data, dict) else {}
-        sender = self._first(payload, self.SENDER_KEYS)
-        text = self._first(payload, self.TEXT_KEYS)
+        sender = _first(payload, self.SENDER_KEYS)
+        text = _first(payload, self.TEXT_KEYS)
 
         if not sender:
             return Response(
@@ -135,13 +149,47 @@ class M360InboundView(APIView):
             }
         )
 
-    @staticmethod
-    def _first(payload: dict, keys) -> str:
-        for key in keys:
-            value = payload.get(key)
-            if value:
-                return str(value)
-        return ""
+
+class TextBeeInboundView(APIView):
+    """Accountability & Feedback Module - inbound SMS from TextBee.dev.
+
+    TextBee forwards an incoming SMS to whatever URL its webhook is
+    configured with, as a plain POST with no custom headers supported on
+    their side. So the shared secret, when set, travels in the URL itself
+    (``?token=...``) rather than a header - ``_token_ok`` already supports
+    that. Field names are read tolerantly, the same way as the M360 view,
+    since TextBee's exact payload shape has not been pinned against a live
+    account yet.
+    """
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    SENDER_KEYS = ("sender", "from", "phoneNumber", "phone", "receivedFrom", "number")
+    TEXT_KEYS = ("message", "text", "body", "content", "sms")
+
+    def post(self, request):
+        if not _token_ok(request, settings.TEXTBEE_WEBHOOK_TOKEN):
+            return Response({"detail": "Invalid token."}, status=status.HTTP_403_FORBIDDEN)
+
+        payload = request.data if isinstance(request.data, dict) else {}
+        sender = _first(payload, self.SENDER_KEYS)
+        text = _first(payload, self.TEXT_KEYS)
+
+        if not sender:
+            return Response(
+                {"detail": "No sender number in the callback payload."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        message = handle_inbound_sms(sender, text, raw_payload=dict(payload))
+        return Response(
+            {
+                "received": True,
+                "processed": message.processed,
+                "note": message.process_note,
+            }
+        )
 
 
 class PubSubPushView(APIView):

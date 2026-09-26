@@ -9,7 +9,7 @@ from django.core import mail
 
 from core.models import DrillParticipant, Notification
 from dissemination import pubsub
-from dissemination.gateways import EmailChannel, M360Client
+from dissemination.gateways import EmailChannel, M360Client, TextBeeClient, get_sms_client
 from dissemination.services import (
     deliver_notification,
     dispatch_notifications,
@@ -131,6 +131,150 @@ class TestM360Client:
         assert "error" in result
 
 
+class TestTextBeeClient:
+    def test_simulates_delivery_when_disabled(self, settings):
+        settings.TEXTBEE_ENABLED = False
+
+        result = TextBeeClient().send("+639171234567", "evacuate")
+
+        assert result.ok
+        assert result.simulated
+        assert result.provider_message_id == "sim-639171234567"
+
+    def test_rejects_an_unusable_number_before_calling_out(self):
+        result = TextBeeClient().send("not a number", "evacuate")
+
+        assert not result.ok
+        assert "Unusable mobile number" in result.error
+
+    def test_disabled_without_a_device_id_even_if_the_api_key_is_set(self, settings):
+        """An API key alone cannot send: TextBee also needs a paired device."""
+        settings.TEXTBEE_ENABLED = True
+        settings.TEXTBEE_API_KEY = "txb_test"
+        settings.TEXTBEE_DEVICE_ID = ""
+
+        result = TextBeeClient().send("+639171234567", "evacuate")
+
+        assert result.simulated
+
+    @responses.activate
+    def test_posts_normalised_digits_with_a_leading_plus(self, settings):
+        settings.TEXTBEE_ENABLED = True
+        settings.TEXTBEE_API_KEY = "txb_test"
+        settings.TEXTBEE_DEVICE_ID = "device-1"
+        responses.post(
+            f"{settings.TEXTBEE_BASE_URL}/gateway/devices/device-1/send-sms",
+            json={"success": True, "data": {"id": "msg-1"}},
+        )
+
+        result = TextBeeClient().send("0917 123 4567", "evacuate")
+
+        assert result.ok
+        assert result.provider_message_id == "msg-1"
+        sent = responses.calls[0].request
+        assert b'"recipients": ["+639171234567"]' in sent.body
+        assert sent.headers["x-api-key"] == "txb_test"
+
+    @responses.activate
+    def test_http_error_is_reported_not_raised(self, settings):
+        settings.TEXTBEE_ENABLED = True
+        settings.TEXTBEE_API_KEY = "txb_test"
+        settings.TEXTBEE_DEVICE_ID = "device-1"
+        responses.post(
+            f"{settings.TEXTBEE_BASE_URL}/gateway/devices/device-1/send-sms",
+            status=502,
+            body="bad gateway",
+        )
+
+        result = TextBeeClient().send("+639171234567", "evacuate")
+
+        assert not result.ok
+        assert "502" in result.error
+
+    @responses.activate
+    def test_an_explicit_failure_flag_is_a_failure(self, settings):
+        settings.TEXTBEE_ENABLED = True
+        settings.TEXTBEE_API_KEY = "txb_test"
+        settings.TEXTBEE_DEVICE_ID = "device-1"
+        responses.post(
+            f"{settings.TEXTBEE_BASE_URL}/gateway/devices/device-1/send-sms",
+            json={"success": False, "message": "device offline"},
+        )
+
+        result = TextBeeClient().send("+639171234567", "evacuate")
+
+        assert not result.ok
+        assert "device offline" in result.error
+
+    @responses.activate
+    def test_a_network_error_is_reported_not_raised(self, settings):
+        settings.TEXTBEE_ENABLED = True
+        settings.TEXTBEE_API_KEY = "txb_test"
+        settings.TEXTBEE_DEVICE_ID = "device-1"
+        responses.post(
+            f"{settings.TEXTBEE_BASE_URL}/gateway/devices/device-1/send-sms",
+            body=requests.ConnectionError("no route"),
+        )
+
+        result = TextBeeClient().send("+639171234567", "evacuate")
+
+        assert not result.ok
+        assert "TextBee request failed" in result.error
+
+    @responses.activate
+    def test_a_non_json_success_body_still_counts_as_accepted(self, settings):
+        settings.TEXTBEE_ENABLED = True
+        settings.TEXTBEE_API_KEY = "txb_test"
+        settings.TEXTBEE_DEVICE_ID = "device-1"
+        responses.post(
+            f"{settings.TEXTBEE_BASE_URL}/gateway/devices/device-1/send-sms",
+            body="OK",
+            status=200,
+        )
+
+        assert TextBeeClient().send("+639171234567", "evacuate").ok
+
+    def test_device_status_reports_simulated_when_disabled(self, settings):
+        settings.TEXTBEE_ENABLED = False
+
+        assert TextBeeClient().device_status() == {
+            "enabled": False,
+            "simulated": True,
+            "device": None,
+        }
+
+    @responses.activate
+    def test_device_status_failure_is_reported_not_raised(self, settings):
+        settings.TEXTBEE_ENABLED = True
+        settings.TEXTBEE_API_KEY = "txb_test"
+        settings.TEXTBEE_DEVICE_ID = "device-1"
+        responses.get(
+            f"{settings.TEXTBEE_BASE_URL}/gateway/devices/device-1", status=500
+        )
+
+        result = TextBeeClient().device_status()
+
+        assert result["device"] is None
+        assert "error" in result
+
+
+class TestGetSmsClient:
+    def test_selects_m360_by_default(self, settings):
+        settings.SMS_PROVIDER = "m360"
+
+        assert isinstance(get_sms_client(), M360Client)
+
+    def test_selects_textbee(self, settings):
+        settings.SMS_PROVIDER = "textbee"
+
+        assert isinstance(get_sms_client(), TextBeeClient)
+
+    def test_an_unknown_provider_falls_back_to_m360(self, settings):
+        settings.SMS_PROVIDER = "not-a-real-provider"
+
+        assert isinstance(get_sms_client(), M360Client)
+
+
 class TestEmailChannel:
     def test_sends_through_the_configured_backend(self):
         with EmailChannel(subject="[DSO] Drill") as channel:
@@ -187,6 +331,16 @@ class TestDeliverNotification:
 
         participant.refresh_from_db()
         assert participant.status == DrillParticipant.Status.SAFE
+
+    def test_dispatch_uses_whichever_sms_provider_is_configured(self, queued, settings):
+        settings.SMS_PROVIDER = "textbee"
+        settings.TEXTBEE_ENABLED = False  # simulated, but through the TextBee path
+
+        status = deliver_notification(queued[0].pk)
+
+        assert status == Notification.Status.SENT
+        queued[0].refresh_from_db()
+        assert queued[0].provider_message_id.startswith("sim-")
 
     def test_a_missing_row_is_reported_not_raised(self):
         assert deliver_notification(999999) == Notification.Status.FAILED
@@ -335,3 +489,19 @@ class TestHealthCheck:
         assert report["queue"]["failed"] == 2
         assert not report["queue"]["ok"]
         assert not report["ok"]
+
+    def test_reports_which_sms_provider_is_active(self, settings):
+        settings.SMS_PROVIDER = "m360"
+        assert health_check()["sms_gateway"]["provider"] == "m360"
+
+        settings.SMS_PROVIDER = "textbee"
+        assert health_check()["sms_gateway"]["provider"] == "textbee"
+
+    def test_textbee_health_uses_device_status_not_balance(self, settings):
+        settings.SMS_PROVIDER = "textbee"
+        settings.TEXTBEE_ENABLED = False
+
+        report = health_check()
+
+        assert report["sms_gateway"]["ok"]
+        assert "device" in report["sms_gateway"]
