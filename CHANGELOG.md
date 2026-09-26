@@ -104,11 +104,20 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
   audit log: `"command": ["C:/Program Files/Git/app/entrypoint.sh"]`, not
   the `/app/entrypoint.sh` the script sent). `/app/entrypoint.sh` is a
   path inside the container, never the host filesystem, so conversion is
-  always wrong for this one argument. Fixed by prefixing just that
-  `gcloud run jobs` call with `MSYS_NO_PATHCONV=1`, scoped narrowly so it
-  doesn't disable conversion for the script's other, genuinely
-  host-filesystem path arguments (`docker build`'s `$ROOT_DIR`,
-  `--key-file=$CREDENTIALS_FILE`).
+  always wrong for this one argument.
+
+  First fix attempt prefixed the call with `MSYS_NO_PATHCONV=1`, which
+  turned out to be the wrong tool: that variable disables path conversion
+  for the *entire* invocation, including a conversion `gcloud`'s own
+  launcher script depends on internally (handing its bundled `python3` a
+  real Windows path to `gcloud.py`) - which then broke instead, with
+  `python3.exe: can't open file 'C:\c\Users\...\gcloud.py'`. Replaced with
+  the actual standard workaround (the same one used for `docker run -v`
+  on Git Bash): a doubled leading slash, `--command="//app/entrypoint.sh"`.
+  MSYS treats a `//`-prefixed argument as an explicit escape and passes it
+  through unconverted; on Linux/macOS, where bash never touches it either
+  way, the doubled slash reaches `gcloud` as-is and the container's own
+  exec later resolves it identically to a single leading slash.
 
 - `infra/resources.json`'s two Cloud Run Jobs (`dispatcher`, `poller`) were
   sized at 256Mi memory with `cpu: "1"`. Cloud Run's gen2 execution
