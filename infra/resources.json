@@ -6,6 +6,7 @@
   "naming_prefix": "calltree-test",
 
   "apis": [
+    "cloudresourcemanager.googleapis.com",
     "run.googleapis.com",
     "sqladmin.googleapis.com",
     "firestore.googleapis.com",
@@ -17,6 +18,7 @@
     "iam.googleapis.com",
     "compute.googleapis.com"
   ],
+  "_apis_comment": "cloudresourcemanager listed first deliberately: several other APIs (Cloud SQL and IAM operations among them) resolve project metadata through it, and on at least one real project in the wild it was NOT enabled by default the way most other 'core' APIs are.",
 
   "artifact_registry": {
     "repository": "calltree-test",

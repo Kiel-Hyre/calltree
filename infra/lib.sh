@@ -156,10 +156,17 @@ gcp_authenticate() {
     fi
     run gcloud config set project "$PROJECT_ID" --quiet
 
-    if [[ "$DRY_RUN" != "true" ]]; then
-        query gcloud projects describe "$PROJECT_ID" >/dev/null \
-            || die "Cannot access project $PROJECT_ID with $expected. Does this service account have enough IAM roles (Editor, or the specific roles this toolkit needs: Cloud Run Admin, Cloud SQL Admin, Firestore/Datastore Admin, Pub/Sub Admin, Artifact Registry Admin, Secret Manager Admin, Service Account Admin, Cloud Scheduler Admin, Service Usage Admin)?"
-    fi
+    # No extra "can this identity reach the project?" probe beyond the
+    # activation above: `set -euo pipefail` already stops the script the
+    # moment any real gcloud call fails, and that failure carries gcloud's
+    # own specific, actionable error - which is more reliable than a guess
+    # of ours. A first version of this function called `gcloud projects
+    # describe` here as a sanity check and printed "not enough IAM roles?"
+    # on failure; on a fresh project the real cause was almost always the
+    # unrelated fact that the Cloud Resource Manager API - which that exact
+    # describe call itself depends on - was not enabled yet, so the
+    # generated diagnostic was actively wrong. `gcloud services enable`,
+    # the very next step in provision.sh, is what actually proves access.
 }
 
 # --------------------------------------------------------------------------

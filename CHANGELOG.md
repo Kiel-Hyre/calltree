@@ -93,6 +93,23 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ### Fixed
 
+- `infra/lib.sh`'s `gcp_authenticate()` verified project access with
+  `gcloud projects describe`, which itself requires the Cloud Resource
+  Manager API - not guaranteed enabled on a project before
+  `provision.sh` has had the chance to enable it (`gcloud services
+  enable ...` is the very next step). Found by actually installing
+  `gcloud` and running against a real project for the first time: the
+  check failed with "Cloud Resource Manager API has not been used in
+  this project," and this toolkit's own diagnostic message
+  ("not enough IAM roles?") would have sent the wrong signal - the
+  account had `roles/owner`. Removed the check entirely; `set -euo
+  pipefail` already stops the script on any real gcloud failure, and
+  that failure carries gcloud's own specific, actionable error, which
+  is more reliable than a guess of ours. Added
+  `cloudresourcemanager.googleapis.com` to `resources.json`'s `apis`
+  list (first in the list) so `provision.sh` enables it early anyway,
+  since other operations resolve project metadata through it too.
+
 - `infra/deploy.sh` and `infra/provision.sh` each had one `run gcloud ...
   add-iam-policy-binding ... >/dev/null` call whose trailing redirect
   silenced `run()`'s own dry-run preview line along with the real command's
