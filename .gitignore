@@ -6,10 +6,6 @@
 *-service-account.json
 *credentials*.json
 !package-lock.json
-# Per-environment infra overrides (infra/test.env, infra/prod.env, ...).
-# Only the *.env.example template is tracked.
-infra/*.env
-!infra/*.env.example
 
 # --- Python ---------------------------------------------------------------
 __pycache__/

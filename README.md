@@ -395,7 +395,6 @@ Pub/Sub, Secret Manager and Artifact Registry, all described declaratively in
 [`infra/resources.json`](infra/resources.json).
 
 ```bash
-cp infra/test.env.example infra/test.env   # cloud-specific overrides of .env
 ./infra/provision.sh                       # base infra - once
 ./infra/deploy.sh                          # build, push, deploy - every release
 ./infra/destroy.sh                         # tear it all down when done

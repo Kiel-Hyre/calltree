@@ -39,45 +39,33 @@ state with `resources.json`.
 
 ## Configuration
 
-Two layers, matching the split the rest of the repo already uses for `.env`:
-
 - **`resources.json`** - topology and sizing (names, region, machine tiers,
   schedules). No secrets live here, ever - only which local env variable
   backs each Secret Manager entry.
-- **`infra/test.env`** (gitignored; copy from
-  [`test.env.example`](test.env.example)) - overrides the repo root's
-  `.env` for values that should differ between local development and this
-  cloud environment. The most important one: local dev runs with
-  `DJANGO_DEBUG=true`, which must not ship to anything reachable from the
-  internet, so `infra/test.env` sets it back to `false`. Anything **not**
-  listed in `infra/test.env` is inherited from the root `.env` as-is -
-  notably `M360_ENABLED` / `TEXTBEE_ENABLED`, since whether SMS actually
-  sends is a decision for the environment as a whole, not something that
-  should silently differ between local and cloud.
-
-```bash
-cp infra/test.env.example infra/test.env
-# edit infra/test.env if you need more overrides than the DJANGO_DEBUG one
-```
+- **The repo root's `.env`** - this is a test environment, so provision.sh
+  and deploy.sh read it as-is, unmodified, the same file local dev uses.
+  That includes whatever it currently has `DJANGO_DEBUG` set to - if that
+  is `true`, the deployed test URL runs with Django's debug mode on
+  (verbose error pages, settings visible in tracebacks). Acceptable for a
+  disposable test environment; do not point this toolkit at anything real
+  without setting `DJANGO_DEBUG=false` first.
 
 Every secret Cloud Run receives (`DJANGO_SECRET_KEY`, the database
-password, webhook tokens, the TextBee/M360 API keys, ...) is read from
-whichever of `infra/test.env` / the root `.env` resolves it, uploaded to
-Secret Manager by `provision.sh`, and referenced by `deploy.sh` via
-`--set-secrets` - the value is never a `gcloud` command-line argument or a
-line in `resources.json`, so it never lands in shell history or in this
-repo. The one exception, inherent to the `gcloud sql users create` /
-`set-password` API and not something this toolkit can avoid, is the
-database password: it is passed as a `--password` flag, so it is briefly
-visible in a process listing while `provision.sh` runs. Acceptable for a
-test-tier password; treat that command as sensitive if this ever holds
-anything that matters.
+password, webhook tokens, the TextBee/M360 API keys, ...) is read from the
+root `.env`, uploaded to Secret Manager by `provision.sh`, and referenced
+by `deploy.sh` via `--set-secrets` - the value is never a `gcloud`
+command-line argument or a line in `resources.json`, so it never lands in
+shell history or in this repo. The one exception, inherent to the
+`gcloud sql users create` / `set-password` API and not something this
+toolkit can avoid, is the database password: it is passed as a
+`--password` flag, so it is briefly visible in a process listing while
+`provision.sh` runs. Acceptable for a test-tier password; treat that
+command as sensitive if this ever holds anything that matters.
 
 ## Usage
 
 ```bash
 # One-time setup
-cp infra/test.env.example infra/test.env    # then edit if needed
 ./infra/provision.sh                        # or --dry-run to preview first
 
 # Every release

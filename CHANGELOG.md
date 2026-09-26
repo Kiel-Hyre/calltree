@@ -47,11 +47,14 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
     exists" branches of all three scripts; caught and fixed a real bug this
     way (see Fixed) plus a missing confirmation line on the Firestore
     delete path.
-  - `infra/test.env` (gitignored; template at `infra/test.env.example`)
-    layers environment-specific overrides on top of the repo root's `.env`
-    - notably `DJANGO_DEBUG=false`, since local dev's `.env` has `true` and
-      that has no business on anything reachable from the internet.
-      Anything not overridden here still inherits from the root `.env`.
+  - Reads the repo root's `.env` directly, unmodified - this is a
+    disposable test environment, so provision.sh/deploy.sh deliberately do
+    not maintain a separate cloud-specific env file. Whatever `.env`
+    currently has (`DJANGO_DEBUG` included) is what gets deployed; an
+    earlier version of this toolkit added a separate `infra/test.env`
+    override layer specifically to force `DJANGO_DEBUG=false` in the cloud,
+    which turned out to be unwanted complexity for a test-only deployment
+    and was removed before release.
   - `infra/README.md` documents prerequisites, the required IAM roles, and
     the reasoning above in full.
 
