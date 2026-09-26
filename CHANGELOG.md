@@ -93,6 +93,16 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ### Fixed
 
+- `infra/resources.json`'s `firestore.type` was `"FIRESTORE_NATIVE"`, the
+  enum name Firestore's own API uses internally. Current `gcloud` (`firestore
+  databases create --type=...`) instead wants the CLI's own lowercase,
+  hyphenated flag values and rejects the old form outright:
+  `Invalid choice: 'FIRESTORE_NATIVE'. Did you mean 'firestore-native'?`.
+  Found by running `provision.sh` for real against the live project - this
+  is exactly the kind of drift the manifest can't catch on its own, since
+  `--dry-run` never actually invokes `gcloud` to validate a flag value.
+  Changed to `"firestore-native"`.
+
 - Every `*_exists()` check in `infra/lib.sh` (and a couple of inline
   `query gcloud ...` calls in `provision.sh`) was missing `--quiet`.
   Against a project where the relevant API is not enabled yet, `gcloud

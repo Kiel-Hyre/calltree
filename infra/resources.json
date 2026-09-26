@@ -55,7 +55,7 @@
 
   "firestore": {
     "database_id": "(default)",
-    "type": "FIRESTORE_NATIVE",
+    "type": "firestore-native",
     "delete_protection": false
   },
 
