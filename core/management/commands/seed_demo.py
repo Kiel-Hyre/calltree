@@ -64,34 +64,44 @@ class Command(BaseCommand):
             default=None,
             help="Falls back to DJANGO_SUPERUSER_PASSWORD.",
         )
+        parser.add_argument(
+            "--skip-demo-data",
+            action="store_true",
+            help="Skip the demo locations/employees; only ensure the admin account. "
+            "Use this once the personnel directory holds real data, so this "
+            "command stays safe to run on every deploy without undoing edits.",
+        )
 
     @transaction.atomic
     def handle(self, *args, **options):
-        locations = {}
-        for spec in LOCATIONS:
-            location, created = Location.objects.update_or_create(
-                code=spec["code"], defaults=spec
-            )
-            locations[spec["code"]] = location
-            self.stdout.write(
-                f"{'Created' if created else 'Updated'} location {location.name}"
-            )
+        if options["skip_demo_data"]:
+            self.stdout.write("Skipping demo locations/employees (--skip-demo-data).")
+        else:
+            locations = {}
+            for spec in LOCATIONS:
+                location, created = Location.objects.update_or_create(
+                    code=spec["code"], defaults=spec
+                )
+                locations[spec["code"]] = location
+                self.stdout.write(
+                    f"{'Created' if created else 'Updated'} location {location.name}"
+                )
 
-        for emp_id, name, mobile, role, tier, location_code in EMPLOYEES:
-            slug = name.lower().replace(" ", ".")
-            Employee.objects.update_or_create(
-                employee_id=emp_id,
-                defaults={
-                    "full_name": name,
-                    "email": f"{slug}@example.com",
-                    "mobile_number": mobile,
-                    "location": locations[location_code],
-                    "role": role,
-                    "escalation_tier": tier,
-                    "department": "Digital Service Operations",
-                },
-            )
-        self.stdout.write(f"Seeded {len(EMPLOYEES)} employees.")
+            for emp_id, name, mobile, role, tier, location_code in EMPLOYEES:
+                slug = name.lower().replace(" ", ".")
+                Employee.objects.update_or_create(
+                    employee_id=emp_id,
+                    defaults={
+                        "full_name": name,
+                        "email": f"{slug}@example.com",
+                        "mobile_number": mobile,
+                        "location": locations[location_code],
+                        "role": role,
+                        "escalation_tier": tier,
+                        "department": "Digital Service Operations",
+                    },
+                )
+            self.stdout.write(f"Seeded {len(EMPLOYEES)} employees.")
 
         password = options["admin_password"] or os.getenv("DJANGO_SUPERUSER_PASSWORD")
         if not password:

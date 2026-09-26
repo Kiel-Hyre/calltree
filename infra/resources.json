@@ -117,7 +117,8 @@
     "DEFAULT_REMINDER_INTERVAL_MINUTES",
     "DEFAULT_MAX_REMINDERS",
     "DJANGO_SUPERUSER_USERNAME",
-    "DJANGO_SUPERUSER_EMAIL"
+    "DJANGO_SUPERUSER_EMAIL",
+    "SEED_DEMO_ENABLED"
   ],
   "_plain_env_vars_comment": "DATABASE_URL, GCP_PROJECT_ID, PUBLIC_BASE_URL, PUBSUB_TOPIC_NOTIFICATIONS, FIRESTORE_DATABASE, DJANGO_ALLOWED_HOSTS and DJANGO_CSRF_TRUSTED_ORIGINS are computed by deploy.sh from this manifest and the deployed service URL, not copied from .env, so they can never point at the wrong project or the wrong host.",
 

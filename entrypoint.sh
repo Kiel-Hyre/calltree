@@ -19,10 +19,23 @@ seed_superuser() {
     # Only when a password is supplied; never invent one.
     if [ -n "${DJANGO_SUPERUSER_PASSWORD:-}" ]; then
         echo "==> Ensuring the Safety Officer account exists"
+        # SEED_DEMO_ENABLED gates only the demo locations/employees:
+        # seed_demo is update_or_create on fixed IDs, so leaving it on would
+        # silently recreate anything deleted through the personnel
+        # directory every time this runs - and this runs on every `migrate`
+        # job execution, i.e. every deploy. Off by default for that reason.
+        # The admin account itself is always ensured/kept in sync with
+        # .env regardless: it is a Django auth User, not personnel-directory
+        # data, and a fresh database needs some way in.
+        demo_flag=""
+        if [ "${SEED_DEMO_ENABLED:-false}" != "true" ]; then
+            demo_flag="--skip-demo-data"
+        fi
         python manage.py seed_demo \
             --admin-username "${DJANGO_SUPERUSER_USERNAME:-safetyofficer}" \
             --admin-email "${DJANGO_SUPERUSER_EMAIL:-safety@example.com}" \
-            --admin-password "${DJANGO_SUPERUSER_PASSWORD}"
+            --admin-password "${DJANGO_SUPERUSER_PASSWORD}" \
+            $demo_flag
     fi
 }
 

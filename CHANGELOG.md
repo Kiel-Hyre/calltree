@@ -14,6 +14,21 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ### Added
 
+- **`SEED_DEMO_ENABLED`** (default `false`) - `seed_demo`'s demo locations
+  and 8 preset employees are `update_or_create` on fixed IDs, so with the
+  Safety Officer's superuser account seeding running on every `migrate` job
+  execution (i.e. every deploy), anything deleted from the personnel
+  directory through the UI was getting silently recreated on the next
+  deploy. Added `seed_demo --skip-demo-data` (`core/management/commands/
+  seed_demo.py`) to skip just the locations/employees while still ensuring
+  the admin account, and wired `entrypoint.sh`'s `seed_superuser()` to pass
+  it whenever `SEED_DEMO_ENABLED` is not `true`. The admin account itself
+  is intentionally *not* gated by this flag - it's a Django auth `User`,
+  not personnel-directory data, and a fresh database needs some way in
+  regardless. `SEED_DEMO_ENABLED` is forwarded to Cloud Run via
+  `infra/resources.json`'s `plain_env_vars`, same as any other plain
+  setting.
+
 - **GCP infrastructure toolkit** (`infra/`): `provision.sh`, `deploy.sh` and
   `destroy.sh`, all idempotent and driven by a single declarative manifest,
   `infra/resources.json`, so naming/sizing/schedules live in one place
