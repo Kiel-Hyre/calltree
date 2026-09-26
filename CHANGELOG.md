@@ -14,6 +14,17 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ### Changed
 
+- `Notification.Channel.SMS`'s display label was hardcoded to `"SMS (M360)"`
+  (`core/models.py`) from before TextBee existed, so the Django admin's
+  notification list kept showing "SMS (M360)" for every SMS row regardless
+  of `SMS_PROVIDER` - purely a stale label, not a routing bug: dispatch
+  (`dissemination/services.py`) already picks the gateway from
+  `get_sms_client()`/`SMS_PROVIDER`, never from this string. Changed the
+  label to the provider-neutral `"SMS"`, since which gateway handled a
+  message is a global setting, not a per-row fact this model tracks.
+  Migration: `core/migrations/0002_alter_notification_channel.py` (a
+  choices-label change only, no schema/data effect).
+
 - The default alert template put the employee's one-tap status link
   directly in the SMS body ("...reply SAFE or HELP, or tap {link}"). A real
   TextBee delivery was rejected/blocked over this - SMS gateways and

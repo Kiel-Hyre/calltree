@@ -307,7 +307,7 @@ class Notification(TimeStampedModel):
     """
 
     class Channel(models.TextChoices):
-        SMS = "sms", "SMS (M360)"
+        SMS = "sms", "SMS"
         EMAIL = "email", "Email (SMTP)"
 
     class Status(models.TextChoices):
