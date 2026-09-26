@@ -1,0 +1,159 @@
+{
+  "$comment": "Declarative infra manifest for the 'test' environment. provision.sh, deploy.sh and destroy.sh all read this file via jq rather than hardcoding names, so the three scripts and this file never drift apart. Secret VALUES never live here - only which local .env variable backs each Secret Manager entry. Sizing throughout is intentionally minimal ('just test'); bump tiers before any real drill depends on this.",
+  "environment": "test",
+  "project_id": "silent-snow-509114-d2",
+  "region": "asia-southeast1",
+  "naming_prefix": "calltree-test",
+
+  "apis": [
+    "run.googleapis.com",
+    "sqladmin.googleapis.com",
+    "firestore.googleapis.com",
+    "pubsub.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "secretmanager.googleapis.com",
+    "cloudscheduler.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "iam.googleapis.com",
+    "compute.googleapis.com"
+  ],
+
+  "artifact_registry": {
+    "repository": "calltree-test",
+    "format": "docker",
+    "description": "Call Tree System container images (test environment)"
+  },
+
+  "service_account": {
+    "account_id": "calltree-test-run",
+    "display_name": "Call Tree System - Cloud Run runtime (test)",
+    "roles": [
+      "roles/cloudsql.client",
+      "roles/datastore.user",
+      "roles/pubsub.publisher",
+      "roles/secretmanager.secretAccessor",
+      "roles/logging.logWriter"
+    ]
+  },
+
+  "database": {
+    "instance_id": "calltree-test-db",
+    "database_version": "POSTGRES_16",
+    "cpu": 1,
+    "memory": "3840MiB",
+    "edition": "ENTERPRISE",
+    "storage_size_gb": 10,
+    "storage_type": "HDD",
+    "availability_type": "ZONAL",
+    "backups_enabled": false,
+    "database_name": "calltree",
+    "app_user": "calltree",
+    "_comment": "Shared-core-equivalent custom machine, HDD storage, no HA, no backups: cheapest configuration Cloud SQL for Postgres supports. Flip availability_type to REGIONAL and backups_enabled to true before this holds anything that matters."
+  },
+
+  "firestore": {
+    "database_id": "(default)",
+    "type": "FIRESTORE_NATIVE",
+    "delete_protection": false
+  },
+
+  "pubsub": {
+    "topic": "calltree-test-notifications",
+    "push_subscription": "calltree-test-notifications-push",
+    "ack_deadline_seconds": 30,
+    "min_retry_backoff": "10s",
+    "max_retry_backoff": "60s"
+  },
+
+  "secrets": [
+    {"name": "calltree-test-django-secret-key", "env_var": "DJANGO_SECRET_KEY", "required": true},
+    {"name": "calltree-test-db-password", "env_var": "POSTGRES_PASSWORD", "required": true},
+    {"name": "calltree-test-usgs-webhook-token", "env_var": "USGS_WEBHOOK_TOKEN", "required": false},
+    {"name": "calltree-test-m360-webhook-token", "env_var": "M360_WEBHOOK_TOKEN", "required": false},
+    {"name": "calltree-test-m360-app-secret", "env_var": "M360_APP_SECRET", "required": false},
+    {"name": "calltree-test-textbee-webhook-token", "env_var": "TEXTBEE_WEBHOOK_TOKEN", "required": false},
+    {"name": "calltree-test-textbee-api-key", "env_var": "TEXTBEE_API_KEY", "required": false},
+    {"name": "calltree-test-pubsub-push-token", "env_var": "PUBSUB_PUSH_TOKEN", "required": false},
+    {"name": "calltree-test-superuser-password", "env_var": "DJANGO_SUPERUSER_PASSWORD", "required": false},
+    {"name": "calltree-test-email-host-password", "env_var": "EMAIL_HOST_PASSWORD", "required": false}
+  ],
+
+  "plain_env_vars": [
+    "DJANGO_DEBUG",
+    "DJANGO_TIME_ZONE",
+    "DJANGO_LOG_LEVEL",
+    "DJANGO_SECURE_COOKIES",
+    "DJANGO_SSL_REDIRECT",
+    "FIRESTORE_ENABLED",
+    "FIRESTORE_COLLECTION_PREFIX",
+    "PUBSUB_ENABLED",
+    "SMS_PROVIDER",
+    "SMS_MAX_LENGTH",
+    "M360_ENABLED",
+    "M360_APP_KEY",
+    "M360_SHORTCODE_MASK",
+    "M360_BROADCAST_URL",
+    "M360_BALANCE_URL",
+    "M360_TIMEOUT",
+    "TEXTBEE_ENABLED",
+    "TEXTBEE_DEVICE_ID",
+    "TEXTBEE_BASE_URL",
+    "TEXTBEE_TIMEOUT",
+    "EMAIL_ENABLED",
+    "EMAIL_HOST",
+    "EMAIL_PORT",
+    "EMAIL_USE_TLS",
+    "EMAIL_USE_SSL",
+    "EMAIL_HOST_USER",
+    "DEFAULT_FROM_EMAIL",
+    "USGS_FEED_URL",
+    "USGS_POLL_INTERVAL_SECONDS",
+    "TRIGGER_MIN_MAGNITUDE",
+    "TRIGGER_RADIUS_KM",
+    "AUTO_TRIGGER_ENABLED",
+    "DEFAULT_RESPONSE_WINDOW_MINUTES",
+    "DEFAULT_REMINDER_INTERVAL_MINUTES",
+    "DEFAULT_MAX_REMINDERS",
+    "DJANGO_SUPERUSER_USERNAME",
+    "DJANGO_SUPERUSER_EMAIL"
+  ],
+  "_plain_env_vars_comment": "DATABASE_URL, GCP_PROJECT_ID, PUBLIC_BASE_URL, PUBSUB_TOPIC_NOTIFICATIONS, FIRESTORE_DATABASE, DJANGO_ALLOWED_HOSTS and DJANGO_CSRF_TRUSTED_ORIGINS are computed by deploy.sh from this manifest and the deployed service URL, not copied from .env, so they can never point at the wrong project or the wrong host.",
+
+  "cloud_run": {
+    "web": {
+      "service_name": "calltree-test-web",
+      "min_instances": 0,
+      "max_instances": 2,
+      "cpu": "1",
+      "memory": "512Mi",
+      "concurrency": 40,
+      "timeout_seconds": 60,
+      "allow_unauthenticated": true,
+      "_comment": "Scales to zero: a cold start on the first request of the day is an acceptable trade for a test tier costing nothing while idle."
+    },
+    "jobs": {
+      "dispatcher": {
+        "job_name": "calltree-test-dispatcher",
+        "args": ["run_dispatcher"],
+        "cpu": "1",
+        "memory": "256Mi",
+        "max_retries": 1,
+        "task_timeout_seconds": 300,
+        "schedule": "* * * * *",
+        "scheduler_job_name": "calltree-test-dispatcher-sweep",
+        "_comment": "entrypoint.sh only branches on argv[1]; anything not web/worker/poller/migrate falls through to `exec manage.py \"$@\"`, so `run_dispatcher` with no --loop runs one pass (send queued, sweep) and exits - exactly what Cloud Scheduler invoking a Job wants. deploy.sh runs migrations as a one-off override execution of this same job (`--args=migrate`), never by folding a second command into this list."
+      },
+      "poller": {
+        "job_name": "calltree-test-poller",
+        "args": ["poll_usgs"],
+        "cpu": "1",
+        "memory": "256Mi",
+        "max_retries": 1,
+        "task_timeout_seconds": 120,
+        "schedule": "*/2 * * * *",
+        "scheduler_job_name": "calltree-test-usgs-poll",
+        "_comment": "Every 2 minutes, one pass (no --loop), same reasoning as the dispatcher job above. Only useful once AUTO_TRIGGER_ENABLED or manual review of ingested events matters; harmless and cheap otherwise."
+      }
+    }
+  }
+}

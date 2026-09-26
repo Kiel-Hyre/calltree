@@ -14,6 +14,47 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ### Added
 
+- **GCP infrastructure toolkit** (`infra/`): `provision.sh`, `deploy.sh` and
+  `destroy.sh`, all idempotent and driven by a single declarative manifest,
+  `infra/resources.json`, so naming/sizing/schedules live in one place
+  rather than being hardcoded across three scripts.
+  - `provision.sh` creates the base infra: required APIs, an Artifact
+    Registry repo, the Cloud Run runtime service account and its IAM roles,
+    a minimal-tier Cloud SQL for Postgres instance, a Firestore database,
+    the Pub/Sub topic, and Secret Manager entries sourced from `.env`
+    (values are piped into `gcloud secrets create`, never passed as a
+    command-line argument or written into `resources.json`).
+  - `deploy.sh` builds and pushes the image, deploys the Cloud Run web
+    service, deploys the dispatcher and USGS poller as Cloud Run **Jobs**
+    (not services - `entrypoint.sh`'s `worker`/`poller` roles loop forever
+    with no HTTP server, which a Cloud Run service cannot run), runs
+    migrations as a one-off job execution rather than on the web service's
+    own startup (so several instances booting at once cannot race
+    `migrate`), then wires up the Pub/Sub push subscription and two Cloud
+    Scheduler crons once the service's URL is known. Handles Cloud Run's
+    self-reference problem (the app needs its own URL for
+    `PUBLIC_BASE_URL` and the Pub/Sub push target, neither of which exist
+    before the first deploy) with a two-pass deploy: `.run.app` wildcard
+    values for the first pass, then a metadata-only patch once the real URL
+    is known.
+  - `destroy.sh` tears all of it down in reverse order, prompting before
+    anything irreversible (Cloud SQL, Firestore data, Secret Manager
+    values) unless run with `--yes`; `--keep-db` spares Cloud SQL
+    specifically.
+  - Every script accepts `--dry-run`, which prints every `gcloud`/`docker`
+    command instead of running it. Verified by stubbing `gcloud`/`docker`
+    and exercising both the "nothing exists yet" and "everything already
+    exists" branches of all three scripts; caught and fixed a real bug this
+    way (see Fixed) plus a missing confirmation line on the Firestore
+    delete path.
+  - `infra/test.env` (gitignored; template at `infra/test.env.example`)
+    layers environment-specific overrides on top of the repo root's `.env`
+    - notably `DJANGO_DEBUG=false`, since local dev's `.env` has `true` and
+      that has no business on anything reachable from the internet.
+      Anything not overridden here still inherits from the root `.env`.
+  - `infra/README.md` documents prerequisites, the required IAM roles, and
+    the reasoning above in full.
+
 - **TextBee.dev as a second SMS provider** (`dissemination/gateways.py`).
   `TextBeeClient` sends through a paired Android phone's own SIM via the
   TextBee API, matching `M360Client`'s `DeliveryResult` contract so the
@@ -48,6 +89,19 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
   configured token is still enforced.
 
 ### Fixed
+
+- `infra/deploy.sh` and `infra/provision.sh` each had one `run gcloud ...
+  add-iam-policy-binding ... >/dev/null` call whose trailing redirect
+  silenced `run()`'s own dry-run preview line along with the real command's
+  output, since the redirect at the call site applies to the whole
+  invocation, function included. Under `--dry-run` this made the Cloud Run
+  job's invoker-role binding disappear from the printed plan with no
+  indication it was ever going to run. Fixed by adding a `run_quiet()`
+  helper to `lib.sh` that redirects only the *real* command's output,
+  never the dry-run printf, and updating both call sites (plus the
+  matching `remove-iam-policy-binding` call in `destroy.sh`, which had the
+  same shape). Found by stubbing `gcloud` and diffing the dry-run output
+  against the script's own logic, not by inspection.
 
 - The sidebar did not highlight **Drills** on a drill detail page, and the
   page had no way back to the list. Vue Router's `active-class` matches on

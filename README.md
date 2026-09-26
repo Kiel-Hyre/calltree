@@ -389,35 +389,35 @@ command.
 
 ## Deploying to Cloud Run
 
+[`infra/`](infra/) automates all of this: Cloud Run (web service + two
+scheduled jobs for the dispatcher and the USGS poller), Cloud SQL, Firestore,
+Pub/Sub, Secret Manager and Artifact Registry, all described declaratively in
+[`infra/resources.json`](infra/resources.json).
+
 ```bash
-PROJECT_ID=your-project
-REGION=asia-southeast1
-
-gcloud builds submit --tag gcr.io/$PROJECT_ID/calltree
-
-gcloud run deploy calltree \
-  --image gcr.io/$PROJECT_ID/calltree \
-  --region $REGION \
-  --allow-unauthenticated \
-  --set-env-vars "DJANGO_DEBUG=false,GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_ENABLED=true,PUBSUB_ENABLED=true" \
-  --set-secrets "DJANGO_SECRET_KEY=django-secret:latest,M360_APP_SECRET=m360-secret:latest"
+cp infra/test.env.example infra/test.env   # cloud-specific overrides of .env
+./infra/provision.sh                       # base infra - once
+./infra/deploy.sh                          # build, push, deploy - every release
+./infra/destroy.sh                         # tear it all down when done
 ```
 
-Then:
+Every script accepts `--dry-run` to preview its `gcloud`/`docker` commands
+without running them. See [`infra/README.md`](infra/README.md) for
+prerequisites, the required IAM roles, and why the dispatcher/poller are
+Cloud Run *Jobs* on a Cloud Scheduler cron rather than long-running services
+(`entrypoint.sh`'s `worker`/`poller` roles have no HTTP server to bind
+`$PORT` to, which a Cloud Run *service* requires).
 
-1. Set `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` and
-   `PUBLIC_BASE_URL` to the service URL.
-2. Attach Cloud SQL and set `DATABASE_URL`, or keep Firestore-backed status
-   with a managed Postgres of your choice.
-3. Create the Pub/Sub topic and a **push** subscription pointing at
-   `https://<service-url>/api/webhooks/pubsub/?token=<PUBSUB_PUSH_TOKEN>`.
-4. Deploy the worker and poller as separate Cloud Run jobs or services with
-   `RUN_MIGRATIONS_ON_START=false`, or drive `sweep` and `poll_usgs` from
-   Cloud Scheduler.
-5. With more than one instance, run `migrate` as its own job so the instances
-   do not race.
-
-The service account needs `roles/datastore.user` and `roles/pubsub.publisher`.
+To do it by hand instead: attach Cloud SQL and set `DATABASE_URL`; set
+`DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` and `PUBLIC_BASE_URL`
+to the service's URL once it is known; create the Pub/Sub topic and a
+**push** subscription pointing at
+`https://<service-url>/api/webhooks/pubsub/?token=<PUBSUB_PUSH_TOKEN>`; run
+`migrate` as its own one-off job rather than on the web service's own
+startup once there is more than one instance, so they cannot race it; and
+grant the runtime service account `roles/cloudsql.client`,
+`roles/datastore.user`, `roles/pubsub.publisher` and
+`roles/secretmanager.secretAccessor`.
 
 ---
 
@@ -443,3 +443,4 @@ The service account needs `roles/datastore.user` and `roles/pubsub.publisher`.
 
 - [`CHANGELOG.md`](CHANGELOG.md) — what changed, when and why.
 - `.env.example` — every configuration variable, annotated.
+- [`infra/README.md`](infra/README.md) — the GCP provisioning/deploy/teardown toolkit.
