@@ -93,6 +93,47 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ### Fixed
 
+- Every `*_exists()` check in `infra/lib.sh` (and a couple of inline
+  `query gcloud ...` calls in `provision.sh`) was missing `--quiet`.
+  Against a project where the relevant API is not enabled yet, `gcloud
+  describe` responds with an interactive "Would you like to enable and
+  retry? (y/N)?" prompt - and since these checks redirect both stdout
+  *and* stderr to `/dev/null`, that prompt was invisible while `gcloud`
+  still blocked on stdin, waiting for a keystroke nothing would ever
+  send: a silent, unexplained hang, reported as the script "just stuck"
+  with no error and no visible prompt. Confirmed directly: the same
+  `gcloud ... describe` command against a disabled API prints the
+  `(y/N)?` prompt without `--quiet` and skips straight to a clean error
+  with it. Added `--quiet` to every real `gcloud` invocation across all
+  three scripts (existence checks and the create/update/delete calls
+  alike), which is the flag's documented purpose - disable all
+  interactive prompts, fail deterministically instead.
+
+- `.env` had genuinely picked up CRLF line endings (confirmed: 134
+  carriage returns, one per line) from an earlier session in which a
+  Python one-off script rewrote it via `pathlib.Path.write_text()` -
+  which translates every `\n` to the platform's line ending on Windows
+  unless told not to, silently turning a whole file's LF into CRLF on
+  a single write. `.env` is gitignored, so the `eol=lf` rule in
+  `.gitattributes` (which protects every tracked file from exactly
+  this) never applied to it. Renormalised to LF (verified byte-for-byte
+  identical content otherwise: same line count, diff only on the
+  stripped `\r`s). `env_get()` in `infra/lib.sh` now also strips `\r`
+  defensively regardless, since a plain `grep` + string-slice does not,
+  and every secret value this reads feeds `gcloud secrets create
+  --data-file=-` - an unstripped trailing `\r` there would silently
+  corrupt the secret. No secret had actually been pushed to Secret
+  Manager yet when this was found (only `--dry-run` had run for real),
+  so nothing needs to be rotated retroactively.
+
+- `res()`/`res_json()` in `infra/lib.sh` (reading `resources.json`) now
+  also strip `\r` defensively, for the same class of reason - even
+  though `resources.json` on disk was confirmed clean (0 carriage
+  returns) this time, so it was not itself the source of an earlier
+  garbled/overlapping line of terminal output. The defence costs
+  nothing to keep in front of it regardless of which tool touches the
+  file next.
+
 - `infra/lib.sh`'s `gcp_authenticate()` verified project access with
   `gcloud projects describe`, which itself requires the Cloud Resource
   Manager API - not guaranteed enabled on a project before

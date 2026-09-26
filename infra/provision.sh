@@ -43,7 +43,7 @@ log_step "Provisioning project $PROJECT_ID ($REGION), environment '$(res '.envir
 # --------------------------------------------------------------------------
 log_step "Enabling required APIs"
 mapfile -t apis < <(res '.apis[]')
-run gcloud services enable "${apis[@]}" --project="$PROJECT_ID"
+run gcloud services enable "${apis[@]}" --project="$PROJECT_ID" --quiet
 log_ok "APIs enabled: ${apis[*]}"
 
 # --------------------------------------------------------------------------
@@ -59,7 +59,8 @@ else
         --repository-format=docker \
         --location="$REGION" \
         --description="$AR_DESC" \
-        --project="$PROJECT_ID"
+        --project="$PROJECT_ID" \
+        --quiet
     log_ok "Created repository $AR_REPO"
 fi
 
@@ -74,7 +75,8 @@ if service_account_exists "$SA_EMAIL"; then
 else
     run gcloud iam service-accounts create "$SA_ID" \
         --display-name="$(res '.service_account.display_name')" \
-        --project="$PROJECT_ID"
+        --project="$PROJECT_ID" \
+        --quiet
     log_ok "Created service account $SA_EMAIL"
 fi
 
@@ -115,10 +117,10 @@ else
     log_ok "Created Cloud SQL instance $DB_INSTANCE"
 fi
 
-if query gcloud sql databases describe "$DB_NAME" --instance="$DB_INSTANCE" --project="$PROJECT_ID" >/dev/null 2>&1; then
+if query gcloud sql databases describe "$DB_NAME" --instance="$DB_INSTANCE" --project="$PROJECT_ID" --quiet >/dev/null 2>&1; then
     log_ok "Database $DB_NAME already exists"
 else
-    run gcloud sql databases create "$DB_NAME" --instance="$DB_INSTANCE" --project="$PROJECT_ID"
+    run gcloud sql databases create "$DB_NAME" --instance="$DB_INSTANCE" --project="$PROJECT_ID" --quiet
     log_ok "Created database $DB_NAME"
 fi
 
@@ -128,7 +130,7 @@ fi
 # stdin/file alternative. Acceptable for a throwaway test-tier password;
 # rotate it and consider a more controlled execution path (CI runner, not an
 # interactive shell) before this instance holds anything that matters.
-if query gcloud sql users list --instance="$DB_INSTANCE" --project="$PROJECT_ID" --format='value(name)' 2>/dev/null | grep -qx "$DB_USER"; then
+if query gcloud sql users list --instance="$DB_INSTANCE" --project="$PROJECT_ID" --format='value(name)' --quiet 2>/dev/null | grep -qx "$DB_USER"; then
     # Re-assert the password every run: it is read from .env, which is the
     # single source of truth, so a rotated local .env value is what wins.
     run gcloud sql users set-password "$DB_USER" --instance="$DB_INSTANCE" --password="$DB_PASSWORD" --project="$PROJECT_ID" --quiet
@@ -151,7 +153,8 @@ else
         --location="$REGION" \
         --type="$(res '.firestore.type')" \
         $( [[ "$(res '.firestore.delete_protection')" == "true" ]] && echo --delete-protection || echo --no-delete-protection ) \
-        --project="$PROJECT_ID"
+        --project="$PROJECT_ID" \
+        --quiet
     log_ok "Created Firestore database $FS_DB"
 fi
 
@@ -166,7 +169,7 @@ TOPIC="$(res '.pubsub.topic')"
 if pubsub_topic_exists "$TOPIC"; then
     log_ok "Topic $TOPIC already exists"
 else
-    run gcloud pubsub topics create "$TOPIC" --project="$PROJECT_ID"
+    run gcloud pubsub topics create "$TOPIC" --project="$PROJECT_ID" --quiet
     log_ok "Created topic $TOPIC"
 fi
 
@@ -197,14 +200,14 @@ for i in $(seq 0 $((secret_count - 1))); do
         if [[ "$DRY_RUN" == "true" ]]; then
             log "[dry-run] gcloud secrets versions add $name --data-file=- --project=$PROJECT_ID (new value from \$$env_var)"
         else
-            printf '%s' "$value" | gcloud secrets versions add "$name" --data-file=- --project="$PROJECT_ID" >/dev/null
+            printf '%s' "$value" | gcloud secrets versions add "$name" --data-file=- --project="$PROJECT_ID" --quiet >/dev/null
         fi
         log_ok "Updated secret $name from \$$env_var"
     else
         if [[ "$DRY_RUN" == "true" ]]; then
             log "[dry-run] gcloud secrets create $name --data-file=- --project=$PROJECT_ID (value from \$$env_var)"
         else
-            printf '%s' "$value" | gcloud secrets create "$name" --data-file=- --replication-policy=automatic --project="$PROJECT_ID" >/dev/null
+            printf '%s' "$value" | gcloud secrets create "$name" --data-file=- --replication-policy=automatic --project="$PROJECT_ID" --quiet >/dev/null
         fi
         log_ok "Created secret $name from \$$env_var"
     fi

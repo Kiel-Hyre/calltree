@@ -105,15 +105,24 @@ require_cmd() {
 
 # --------------------------------------------------------------------------
 # resources.json access
+#
+# Every value is piped through `tr -d '\r'`: a native Windows jq.exe can
+# write CRLF into a pipe even though the source file and this script are
+# both plain LF, and an embedded \r in a value that later gets printed (or
+# passed as a --project=... flag right before more text) makes the terminal
+# overwrite part of the same line instead of advancing - the exact garbled,
+# overlapping output this toolkit produced the first time it ran on a real
+# Windows machine. Stripping it here, once, means neither script has to
+# know or care which jq build is in front of it.
 # --------------------------------------------------------------------------
 res() {
     # res '.region' -> asia-southeast1 (raw, unquoted)
-    jq -r "$1" "$RESOURCES_JSON"
+    jq -r "$1" "$RESOURCES_JSON" | tr -d '\r'
 }
 
 res_json() {
     # res_json '.database' -> the sub-object as compact JSON, for jq -c iteration
-    jq -c "$1" "$RESOURCES_JSON"
+    jq -c "$1" "$RESOURCES_JSON" | tr -d '\r'
 }
 
 PROJECT_ID="$(res '.project_id')"
@@ -135,7 +144,13 @@ env_get() {
     if [[ -z "$line" ]]; then
         printf '%s' "$default"
     else
-        printf '%s' "${line#*=}"
+        # Strip a stray trailing \r: .env can pick up CRLF line endings from
+        # a Windows editor even though it is untracked by git (so
+        # .gitattributes' `eol=lf` normalisation never touches it). Left in,
+        # it would ride along inside every secret value this feeds to
+        # `gcloud secrets create --data-file=-`, silently corrupting it with
+        # an invisible trailing character the app's own value never has.
+        printf '%s' "${line#*=}" | tr -d '\r'
     fi
 }
 
@@ -173,41 +188,41 @@ gcp_authenticate() {
 # Existence checks (used to make every script idempotent - safe to re-run)
 # --------------------------------------------------------------------------
 sql_instance_exists() {
-    query gcloud sql instances describe "$1" --project="$PROJECT_ID" >/dev/null 2>&1
+    query gcloud sql instances describe "$1" --project="$PROJECT_ID" --quiet >/dev/null 2>&1
 }
 
 secret_exists() {
-    query gcloud secrets describe "$1" --project="$PROJECT_ID" >/dev/null 2>&1
+    query gcloud secrets describe "$1" --project="$PROJECT_ID" --quiet >/dev/null 2>&1
 }
 
 pubsub_topic_exists() {
-    query gcloud pubsub topics describe "$1" --project="$PROJECT_ID" >/dev/null 2>&1
+    query gcloud pubsub topics describe "$1" --project="$PROJECT_ID" --quiet >/dev/null 2>&1
 }
 
 pubsub_sub_exists() {
-    query gcloud pubsub subscriptions describe "$1" --project="$PROJECT_ID" >/dev/null 2>&1
+    query gcloud pubsub subscriptions describe "$1" --project="$PROJECT_ID" --quiet >/dev/null 2>&1
 }
 
 artifact_repo_exists() {
-    query gcloud artifacts repositories describe "$1" --location="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1
+    query gcloud artifacts repositories describe "$1" --location="$REGION" --project="$PROJECT_ID" --quiet >/dev/null 2>&1
 }
 
 service_account_exists() {
-    query gcloud iam service-accounts describe "$1" --project="$PROJECT_ID" >/dev/null 2>&1
+    query gcloud iam service-accounts describe "$1" --project="$PROJECT_ID" --quiet >/dev/null 2>&1
 }
 
 firestore_db_exists() {
-    query gcloud firestore databases describe --database="$1" --project="$PROJECT_ID" >/dev/null 2>&1
+    query gcloud firestore databases describe --database="$1" --project="$PROJECT_ID" --quiet >/dev/null 2>&1
 }
 
 cloud_run_service_exists() {
-    query gcloud run services describe "$1" --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1
+    query gcloud run services describe "$1" --region="$REGION" --project="$PROJECT_ID" --quiet >/dev/null 2>&1
 }
 
 cloud_run_job_exists() {
-    query gcloud run jobs describe "$1" --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1
+    query gcloud run jobs describe "$1" --region="$REGION" --project="$PROJECT_ID" --quiet >/dev/null 2>&1
 }
 
 scheduler_job_exists() {
-    query gcloud scheduler jobs describe "$1" --location="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1
+    query gcloud scheduler jobs describe "$1" --location="$REGION" --project="$PROJECT_ID" --quiet >/dev/null 2>&1
 }

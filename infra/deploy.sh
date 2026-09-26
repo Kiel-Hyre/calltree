@@ -206,7 +206,7 @@ else
     log_step "Running migrations (one-off execution of $DISPATCHER_JOB)"
     run gcloud run jobs execute "$DISPATCHER_JOB" \
         --region="$REGION" --project="$PROJECT_ID" \
-        --args=migrate --wait
+        --args=migrate --wait --quiet
     log_ok "Migrations applied"
 fi
 
@@ -218,7 +218,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
     SERVICE_URL="https://${WEB_SERVICE}-dry-run.a.run.app"
     log "[dry-run] would read the real URL with: gcloud run services describe $WEB_SERVICE --region=$REGION --format=value(status.url)"
 else
-    SERVICE_URL="$(gcloud run services describe "$WEB_SERVICE" --region="$REGION" --project="$PROJECT_ID" --format='value(status.url)')"
+    SERVICE_URL="$(gcloud run services describe "$WEB_SERVICE" --region="$REGION" --project="$PROJECT_ID" --format='value(status.url)' --quiet)"
 fi
 log_ok "Service URL: $SERVICE_URL"
 
@@ -241,7 +241,8 @@ PUSH_ENDPOINT="${SERVICE_URL}/api/webhooks/pubsub/"
 if pubsub_sub_exists "$SUBSCRIPTION"; then
     run gcloud pubsub subscriptions update "$SUBSCRIPTION" \
         --push-endpoint="$PUSH_ENDPOINT" \
-        --project="$PROJECT_ID"
+        --project="$PROJECT_ID" \
+        --quiet
     log_ok "Updated push subscription $SUBSCRIPTION -> $PUSH_ENDPOINT"
 else
     run gcloud pubsub subscriptions create "$SUBSCRIPTION" \
@@ -250,7 +251,8 @@ else
         --ack-deadline="$(res '.pubsub.ack_deadline_seconds')" \
         --min-retry-delay="$(res '.pubsub.min_retry_backoff')" \
         --max-retry-delay="$(res '.pubsub.max_retry_backoff')" \
-        --project="$PROJECT_ID"
+        --project="$PROJECT_ID" \
+        --quiet
     log_ok "Created push subscription $SUBSCRIPTION -> $PUSH_ENDPOINT"
 fi
 [[ -z "$PUBSUB_PUSH_TOKEN" ]] && log_warn "PUBSUB_PUSH_TOKEN is blank: this endpoint accepts pushes with no credential."
@@ -270,13 +272,15 @@ deploy_schedule() {
         run gcloud scheduler jobs update http "$scheduler_name" \
             --schedule="$schedule" --uri="$run_api" --http-method=POST \
             --oauth-service-account-email="$SA_EMAIL" \
-            --location="$REGION" --project="$PROJECT_ID"
+            --location="$REGION" --project="$PROJECT_ID" \
+            --quiet
         log_ok "Updated schedule $scheduler_name ($schedule -> $job_name)"
     else
         run gcloud scheduler jobs create http "$scheduler_name" \
             --schedule="$schedule" --uri="$run_api" --http-method=POST \
             --oauth-service-account-email="$SA_EMAIL" \
-            --location="$REGION" --project="$PROJECT_ID"
+            --location="$REGION" --project="$PROJECT_ID" \
+            --quiet
         log_ok "Created schedule $scheduler_name ($schedule -> $job_name)"
     fi
 }
