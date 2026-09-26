@@ -21,7 +21,13 @@ from django.utils import timezone
 
 from core import datastore
 from core.models import Drill, DrillParticipant, Employee, Notification, SeismicEvent
-from core.services import DEFAULT_TEMPLATE, audit, render_message, truncate_sms
+from core.services import (
+    DEFAULT_SMS_TEMPLATE,
+    DEFAULT_TEMPLATE,
+    audit,
+    render_message,
+    truncate_sms,
+)
 from engine.proximity import evaluate_event, triggered_locations
 
 logger = logging.getLogger(__name__)
@@ -140,6 +146,10 @@ def queue_notifications(
     trail shows why they were never reached.
     """
     template = drill.message_template or DEFAULT_TEMPLATE
+    # Only the default template avoids {link} in SMS; a drill's own custom
+    # message_template is sent as written on every enabled channel, since an
+    # officer who types {link} into it has done so deliberately.
+    sms_template = drill.message_template or DEFAULT_SMS_TEMPLATE
     event = drill.seismic_event
     now = timezone.now()
     rows: list[Notification] = []
@@ -147,6 +157,11 @@ def queue_notifications(
     for participant in participants:
         employee = participant.employee
         body = render_message(template, participant=participant, event=event)
+        sms_body = (
+            body
+            if drill.message_template
+            else render_message(sms_template, participant=participant, event=event)
+        )
 
         if drill.send_sms:
             if employee.sms_opt_in and employee.mobile_number:
@@ -156,7 +171,7 @@ def queue_notifications(
                         channel=Notification.Channel.SMS,
                         purpose=purpose,
                         recipient=employee.mobile_number,
-                        body=truncate_sms(body),
+                        body=truncate_sms(sms_body),
                         queued_at=now,
                     )
                 )
@@ -168,7 +183,7 @@ def queue_notifications(
                         purpose=purpose,
                         status=Notification.Status.SKIPPED,
                         recipient=employee.mobile_number or "",
-                        body=truncate_sms(body),
+                        body=truncate_sms(sms_body),
                         queued_at=now,
                         error_message="No mobile number on file or SMS opt-out.",
                     )

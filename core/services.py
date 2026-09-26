@@ -16,6 +16,15 @@ DEFAULT_TEMPLATE = (
     "{place}. {instruction} Once you are safe, reply SAFE or HELP, or tap {link}"
 )
 
+# SMS carriers/gateways commonly flag or reject a text containing a raw URL
+# (confirmed against a real TextBee delivery, not a hypothetical). The status
+# link still reaches people through email, which has no such restriction -
+# this template just never puts it in the SMS body by default.
+DEFAULT_SMS_TEMPLATE = (
+    "[DSO EARTHQUAKE DRILL] {name}, an M{magnitude} event was reported near "
+    "{place}. {instruction} Once you are safe, reply SAFE or HELP."
+)
+
 _NON_DIGITS = re.compile(r"\D")
 
 

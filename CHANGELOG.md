@@ -12,6 +12,20 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ## [Unreleased]
 
+### Changed
+
+- The default alert template put the employee's one-tap status link
+  directly in the SMS body ("...reply SAFE or HELP, or tap {link}"). A real
+  TextBee delivery was rejected/blocked over this - SMS gateways and
+  carriers commonly flag or refuse a text containing a raw URL. Added
+  `DEFAULT_SMS_TEMPLATE` (`core/services.py`), link-free, used for SMS only
+  when the drill has no custom `message_template`; email keeps the link
+  (`DEFAULT_TEMPLATE`, unchanged), since it isn't subject to the same
+  restriction and is still a valid way to record SAFE/HELP. A drill with
+  its own custom `message_template` is sent as written on every channel -
+  if an officer deliberately types `{link}` into one, that is their choice,
+  not a default we're second-guessing.
+
 ### Added
 
 - **`SEED_DEMO_ENABLED`** (default `false`) - `seed_demo`'s demo locations
