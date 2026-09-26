@@ -182,7 +182,17 @@ deploy_job() {
     local verb="update"
     cloud_run_job_exists "$job_name" || verb="create"
 
-    run gcloud run jobs "$verb" "$job_name" \
+    # MSYS_NO_PATHCONV: on Git Bash for Windows, MSYS auto-converts any
+    # argument that looks like a Unix absolute path before handing it to a
+    # native .exe, so a bare --command="/app/entrypoint.sh" arrives at gcloud
+    # (and then Cloud Run) as something like "C:/Program Files/Git/app/
+    # entrypoint.sh" - a path that does not exist in the container, so it
+    # exits immediately with code 1. /app/entrypoint.sh is a path *inside the
+    # container*, never the host filesystem, so conversion is always wrong
+    # here. Scoped to this one call only: other calls in this script (docker
+    # build's $ROOT_DIR, --key-file=$CREDENTIALS_FILE) are real host paths
+    # that need the normal conversion to keep working.
+    MSYS_NO_PATHCONV=1 run gcloud run jobs "$verb" "$job_name" \
         "${common_flags[@]}" \
         --command="/app/entrypoint.sh" \
         --args="$(IFS=,; echo "${args[*]}")" \

@@ -93,6 +93,23 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ### Fixed
 
+- `deploy.sh`'s `deploy_job()` passed `--command="/app/entrypoint.sh"` to
+  `gcloud run jobs create/update`. On Git Bash for Windows, MSYS
+  auto-converts any argument that looks like a Unix absolute path before
+  handing it to a native `.exe` - and since `/app` isn't a real path on the
+  host, it rewrote this one to something like `C:/Program Files/Git/app/
+  entrypoint.sh` before `gcloud` ever saw it. Cloud Run then tried to exec
+  a path that does not exist inside the container, and every job execution
+  failed immediately with exit code 1 (confirmed straight from the job's
+  audit log: `"command": ["C:/Program Files/Git/app/entrypoint.sh"]`, not
+  the `/app/entrypoint.sh` the script sent). `/app/entrypoint.sh` is a
+  path inside the container, never the host filesystem, so conversion is
+  always wrong for this one argument. Fixed by prefixing just that
+  `gcloud run jobs` call with `MSYS_NO_PATHCONV=1`, scoped narrowly so it
+  doesn't disable conversion for the script's other, genuinely
+  host-filesystem path arguments (`docker build`'s `$ROOT_DIR`,
+  `--key-file=$CREDENTIALS_FILE`).
+
 - `infra/resources.json`'s two Cloud Run Jobs (`dispatcher`, `poller`) were
   sized at 256Mi memory with `cpu: "1"`. Cloud Run's gen2 execution
   environment requires at least 512Mi whenever CPU is always-allocated
