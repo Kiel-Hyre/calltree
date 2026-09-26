@@ -93,6 +93,14 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ### Fixed
 
+- `infra/resources.json`'s two Cloud Run Jobs (`dispatcher`, `poller`) were
+  sized at 256Mi memory with `cpu: "1"`. Cloud Run's gen2 execution
+  environment requires at least 512Mi whenever CPU is always-allocated
+  (unthrottled, the default for Jobs): `Total memory < 512 Mi is not
+  supported with gen2 execution environment with cpu always allocated`.
+  Found on a real `deploy.sh` run - the web service (already 512Mi) deployed
+  fine; only the two jobs were under the floor. Bumped both to 512Mi.
+
 - `deploy.sh`'s first-pass `gcloud run deploy` for the web service combined
   `--set-env-vars` (via `common_flags`, shared with the Cloud Run jobs) with
   its own extra `--update-env-vars="RUN_MIGRATIONS_ON_START=false"` on
