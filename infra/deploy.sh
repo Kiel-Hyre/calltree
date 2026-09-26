@@ -99,6 +99,7 @@ done
 
 # Values this script computes itself, rather than trusting .env, so they can
 # never point at the wrong project, database or host:
+plain_env+="DATABASE_URL=${DATABASE_URL},"
 plain_env+="GCP_PROJECT_ID=${PROJECT_ID},"
 plain_env+="FIRESTORE_DATABASE=$(res '.firestore.database_id'),"
 plain_env+="PUBSUB_TOPIC_NOTIFICATIONS=${TOPIC},"

@@ -93,6 +93,20 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ### Fixed
 
+- `deploy.sh` computed `DATABASE_URL` (the Cloud SQL Unix-socket connection
+  string) but never actually added it to the env vars sent to Cloud Run -
+  it built the variable and then never used it. `calltree/settings.py`
+  falls back to a local SQLite file at `data/calltree.sqlite3` whenever
+  `DATABASE_URL` is unset, so the deployed web service was silently running
+  against a fresh, empty SQLite database inside its own ephemeral
+  container filesystem instead of the real Cloud SQL instance - migrations
+  had been applied to Cloud SQL by the one-off job execution, but the web
+  service itself never saw `DATABASE_URL` at all, so every one of its
+  instances started from a blank slate: `OperationalError ... no such
+  table: auth_user` on the very first login attempt. Added the missing
+  `plain_env+="DATABASE_URL=${DATABASE_URL},"` line alongside the script's
+  other self-computed values.
+
 - `deploy.sh`'s `deploy_job()` passed `--command="/app/entrypoint.sh"` to
   `gcloud run jobs create/update`. On Git Bash for Windows, MSYS
   auto-converts any argument that looks like a Unix absolute path before
