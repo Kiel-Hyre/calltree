@@ -93,6 +93,17 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ### Fixed
 
+- `deploy.sh`'s first-pass `gcloud run deploy` for the web service combined
+  `--set-env-vars` (via `common_flags`, shared with the Cloud Run jobs) with
+  its own extra `--update-env-vars="RUN_MIGRATIONS_ON_START=false"` on
+  `web_flags`. `gcloud run deploy` only accepts one env-var mutation flag
+  per invocation and rejected the pair outright: `At most one of
+  --clear-env-vars | --env-vars-file | --set-env-vars | --remove-env-vars
+  --update-env-vars can be specified.` Found on a real `deploy.sh` run,
+  after `provision.sh` succeeded. Folded `RUN_MIGRATIONS_ON_START=false`
+  into `plain_env` (which already feeds the shared `--set-env-vars`)
+  instead of a second flag.
+
 - `infra/resources.json`'s `firestore.type` was `"FIRESTORE_NATIVE"`, the
   enum name Firestore's own API uses internally. Current `gcloud` (`firestore
   databases create --type=...`) instead wants the CLI's own lowercase,

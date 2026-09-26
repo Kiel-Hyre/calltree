@@ -108,6 +108,12 @@ plain_env+="DJANGO_ALLOWED_HOSTS=.run.app,"
 plain_env+="DJANGO_CSRF_TRUSTED_ORIGINS=https://*.run.app,"
 # Corrected to the real URL once it is known - see "Fix up the URL" below.
 plain_env+="PUBLIC_BASE_URL=https://placeholder.run.app,"
+# Multiple instances could race a startup migration; a dedicated one-off job
+# execution (below) runs it exactly once instead. Folded into plain_env
+# rather than a separate --update-env-vars flag on the deploy call: gcloud
+# run deploy accepts only one of --set-env-vars/--update-env-vars/etc. per
+# invocation, and common_flags below already uses --set-env-vars.
+plain_env+="RUN_MIGRATIONS_ON_START=false,"
 plain_env="${plain_env%,}"
 
 # Secrets: only ones that actually exist (an optional secret with a blank
@@ -152,9 +158,6 @@ web_flags=(
 )
 [[ "$(res '.cloud_run.web.allow_unauthenticated')" == "true" ]] \
     && web_flags+=(--allow-unauthenticated) || web_flags+=(--no-allow-unauthenticated)
-# Multiple instances could race a startup migration; a dedicated one-off
-# job execution (below) runs it exactly once instead.
-web_flags+=(--update-env-vars="RUN_MIGRATIONS_ON_START=false")
 
 run gcloud run deploy "$WEB_SERVICE" "${web_flags[@]}"
 log_ok "Deployed $WEB_SERVICE"
