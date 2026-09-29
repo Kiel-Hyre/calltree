@@ -12,6 +12,23 @@ Entry categories: **Added**, **Changed**, **Fixed**, **Removed**,
 
 ## [Unreleased]
 
+### Added
+
+- **`infra/pause.sh` / `infra/resume.sh`** - the test environment was
+  burning credits fast between sessions. Cloud Run scales to zero on its
+  own (no traffic, no charge), but Cloud SQL doesn't - it's a machine that
+  bills continuously while it exists, and with the dispatcher/poller Cloud
+  Scheduler jobs hitting it every 1-2 minutes around the clock, that's
+  where the spend was actually going. `pause.sh` stops the Cloud SQL
+  instance (`--activation-policy=NEVER`) and pauses both Cloud Scheduler
+  jobs; `resume.sh` restarts the instance (`--activation-policy=ALWAYS`,
+  polling up to 5 min for `RUNNABLE`) and resumes the schedules. Same
+  conventions as the other three scripts: idempotent, `--dry-run`,
+  `--quiet` on every real `gcloud` call. Verified with `--dry-run` against
+  the real project, which also surfaced that Cloud SQL was already
+  `STOPPED` while both schedules were still `ENABLED` and firing into it -
+  exactly the gap these two scripts close.
+
 ### Changed
 
 - `Notification.Channel.SMS`'s display label was hardcoded to `"SMS (M360)"`

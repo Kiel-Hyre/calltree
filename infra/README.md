@@ -10,6 +10,9 @@ provision.sh   base infra: APIs, Artifact Registry, Cloud SQL, Firestore,
                the Pub/Sub topic, the runtime service account, Secret Manager
 deploy.sh      build the image, push it, deploy the service + jobs, wire up
                the Pub/Sub push subscription and Cloud Scheduler
+pause.sh       stop Cloud SQL and pause the schedules, to stop spend between
+               test sessions without tearing anything down
+resume.sh      reverse pause.sh
 destroy.sh     tear all of it back down, in reverse order
 resources.json single source of truth for names/sizing/schedules - every
                script reads this rather than hardcoding anything
@@ -17,9 +20,24 @@ lib.sh         shared helpers (sourced, not run directly)
 ```
 
 Run them in that order: `provision.sh` once, `deploy.sh` for every release,
-`destroy.sh` when the test environment is no longer needed. All three are
-idempotent - re-running any of them is safe and just reconciles the current
-state with `resources.json`.
+`pause.sh`/`resume.sh` between test sessions, `destroy.sh` when the test
+environment is no longer needed. All of them are idempotent - re-running any
+of them is safe and just reconciles the current state with `resources.json`
+(or, for `pause.sh`/`resume.sh`, with whatever it last did).
+
+### Why `pause.sh` exists
+
+Cloud Run scales to zero on its own (`min_instances: 0` - no traffic, no
+charge), so leaving the web service and Jobs deployed between test sessions
+costs ~nothing by itself. Cloud SQL does not: it is a real machine that
+bills continuously for as long as it exists, whether or not anything ever
+queries it - and with two Cloud Scheduler jobs hitting the dispatcher/poller
+every 1-2 minutes around the clock, that is almost always where a "test"
+environment's credits actually go. `pause.sh` stops the Cloud SQL instance
+and pauses both schedules; `resume.sh` restarts the instance (waiting for it
+to come back `RUNNABLE`) and resumes them. The web service is left running
+and reachable either way - it will just fail on any request that touches
+the database while paused, since this pauses spend, not the site itself.
 
 ## Prerequisites
 
@@ -71,6 +89,10 @@ command as sensitive if this ever holds anything that matters.
 # Every release
 ./infra/deploy.sh                           # or --skip-build to redeploy
                                              # the last pushed image
+
+# Between test sessions, to stop burning credits
+./infra/pause.sh                            # stops Cloud SQL, pauses schedules
+./infra/resume.sh                           # ... and this brings it back
 
 # When you are done with the test environment
 ./infra/destroy.sh                          # prompts before each destructive

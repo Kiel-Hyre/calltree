@@ -397,6 +397,8 @@ Pub/Sub, Secret Manager and Artifact Registry, all described declaratively in
 ```bash
 ./infra/provision.sh                       # base infra - once
 ./infra/deploy.sh                          # build, push, deploy - every release
+./infra/pause.sh                           # between sessions - stop Cloud SQL
+./infra/resume.sh                          # ... and bring it back
 ./infra/destroy.sh                         # tear it all down when done
 ```
 
